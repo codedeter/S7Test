@@ -42,6 +42,11 @@ database.db
 # Excel
 *.xlsx
 
+# Node.js
+node_modules/
+package-lock.json
+yarn.lock
+
 # OS files
 .DS_Store
 Thumbs.db
