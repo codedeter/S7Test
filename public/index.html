@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PLC数据监控系统</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+      background-color: #f0f2f5;
+      padding: 20px;
+    }
+    .header {
+      text-align: center;
+      padding: 20px;
+      background-color: #1890ff;
+      color: white;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    .header h1 {
+      font-size: 28px;
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-around;
+      background-color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .status-item {
+      text-align: center;
+    }
+    .status-item .label {
+      font-size: 14px;
+      color: #666;
+    }
+    .status-item .value {
+      font-size: 24px;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+    .status-connected {
+      color: #52c41a;
+    }
+    .status-disconnected {
+      color: #f5222d;
+    }
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .card {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .card h2 {
+      color: #1890ff;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e8e8e8;
+    }
+    .full-width {
+      grid-column: 1 / -1;
+    }
+    .fault-list, .anomaly-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .fault-item {
+      padding: 12px;
+      margin-bottom: 10px;
+      border-left: 4px solid #f5222d;
+      background-color: #fff1f0;
+      border-radius: 4px;
+    }
+    .fault-item.warning {
+      border-left-color: #faad14;
+      background-color: #fffbe6;
+    }
+    .fault-item.info {
+      border-left-color: #1890ff;
+      background-color: #e6f7ff;
+    }
+    .fault-title {
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .fault-desc {
+      color: #666;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .fault-time {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+    }
+    .variable-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .variable-item {
+      padding: 10px;
+      background-color: #fafafa;
+      border-radius: 4px;
+      border: 1px solid #e8e8e8;
+    }
+    .variable-name {
+      font-size: 13px;
+      color: #666;
+    }
+    .variable-value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #1890ff;
+    }
+    .variable-value.true {
+      color: #52c41a;
+    }
+    .variable-value.false {
+      color: #f5222d;
+    }
+    .chart-container {
+      height: 300px;
+    }
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .tab {
+      padding: 8px 16px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tab.active {
+      background-color: #1890ff;
+      color: white;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .variable-item:hover {
+      cursor: pointer;
+      background-color: #e6f7ff;
+      border-color: #1890ff;
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 800px;
+      max-height: 80vh;
+      overflow: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #e8e8e8;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #999;
+      padding: 0;
+      line-height: 1;
+    }
+    .modal-close:hover {
+      color: #333;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .modal-chart {
+      height: 350px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔧 PLC数据监控系统</h1>
+    <p style="margin-top: 8px; opacity: 0.9">实时数据采集与故障分析</p>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-item">
+      <div class="label">PLC连接状态</div>
+      <div class="value status-disconnected" id="connection-status">未连接</div>
+    </div>
+    <div class="status-item">
+      <div class="label">数据点数</div>
+      <div class="value" id="data-count">0</div>
+    </div>
+    <div class="status-item">
+      <div class="label">故障数</div>
+      <div class="value" id="fault-count">0</div>
+    </div>
+    <div class="status-item">
+      <div class="label">异常数</div>
+      <div class="value" id="anomaly-count">0</div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="card full-width">
+      <h2>📊 油温趋势</h2>
+      <div class="chart-container">
+        <canvas id="oilTempChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🌡️ 水温趋势</h2>
+      <div class="chart-container">
+        <canvas id="waterTempChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💪 总压力趋势</h2>
+      <div class="chart-container">
+        <canvas id="pressureChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📍 滑块位置</h2>
+      <div class="chart-container">
+        <canvas id="positionChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⚡ 滑块速度</h2>
+      <div class="chart-container">
+        <canvas id="speedChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⚠️ 故障检测</h2>
+      <div class="fault-list" id="fault-list">
+        <p style="color: #999; text-align: center;">暂无故障</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔔 异常提醒</h2>
+      <div class="anomaly-list" id="anomaly-list">
+        <p style="color: #999; text-align: center;">暂无异常</p>
+      </div>
+    </div>
+
+    <div class="card full-width">
+      <h2>📋 PLC变量列表</h2>
+      <div class="variable-grid" id="variable-grid"></div>
+    </div>
+  </div>
+
+  <!-- 变量时序图弹窗 -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">变量时序图</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-chart">
+          <canvas id="modal-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let dataCount = 0;
+    let faultCount = 0;
+    let anomalyCount = 0;
+
+    // 图表配置 - 放在最前面！
+    const chartConfig = {
+      type: 'line',
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: false
+          }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom'
+          }
+        }
+      }
+    };
+
+    // 油温图表
+    const oilTempChart = new Chart(
+      document.getElementById('oilTempChart'),
+      {
+        ...chartConfig,
+        data: {
+          labels: [],
+          datasets: [{
+            label: '油温(℃)',
+            data: [],
+            borderColor: '#f5222d',
+            backgroundColor: 'rgba(245,34,45,0.1)',
+            tension: 0.3,
+            fill: true
+          }]
+        }
+      }
+    );
+
+    // 水温图表
+    const waterTempChart = new Chart(
+      document.getElementById('waterTempChart'),
+      {
+        ...chartConfig,
+        data: {
+          labels: [],
+          datasets: [{
+            label: '水温(℃)',
+            data: [],
+            borderColor: '#1890ff',
+            backgroundColor: 'rgba(24,144,255,0.1)',
+            tension: 0.3,
+            fill: true
+          }]
+        }
+      }
+    );
+
+    // 总压力图表
+    const pressureChart = new Chart(
+      document.getElementById('pressureChart'),
+      {
+        ...chartConfig,
+        data: {
+          labels: [],
+          datasets: [{
+            label: '总压力(T)',
+            data: [],
+            borderColor: '#faad14',
+            backgroundColor: 'rgba(250,173,20,0.1)',
+            tension: 0.3,
+            fill: true
+          }]
+        }
+      }
+    );
+
+    // 滑块位置图表
+    const positionChart = new Chart(
+      document.getElementById('positionChart'),
+      {
+        ...chartConfig,
+        data: {
+          labels: [],
+          datasets: [{
+            label: '滑块位置(mm)',
+            data: [],
+            borderColor: '#52c41a',
+            backgroundColor: 'rgba(82,196,26,0.1)',
+            tension: 0.3,
+            fill: true
+          }]
+        }
+      }
+    );
+
+    // 滑块速度图表
+    const speedChart = new Chart(
+      document.getElementById('speedChart'),
+      {
+        ...chartConfig,
+        data: {
+          labels: [],
+          datasets: [{
+            label: '滑块速度',
+            data: [],
+            borderColor: '#722ed1',
+            backgroundColor: 'rgba(114,46,209,0.1)',
+            tension: 0.3,
+            fill: true
+          }]
+        }
+      }
+    );
+
+    // 弹窗相关变量
+    let modalChart = null;
+    let selectedVariableName = null;
+    let variableHistoryData = {};
+
+    // 弹窗相关函数 - 回退到简单版本
+    function openModal(variableName) {
+      selectedVariableName = variableName;
+      document.getElementById('modal-title').textContent = variableName + ' 时序图';
+      document.getElementById('modal-overlay').classList.add('active');
+      
+      // 初始化或更新图表
+      if (!modalChart) {
+        modalChart = new Chart(
+          document.getElementById('modal-chart'),
+          {
+            ...chartConfig,
+            data: {
+              labels: [],
+              datasets: [{
+                label: variableName,
+                data: [],
+                borderColor: '#1890ff',
+                backgroundColor: 'rgba(24,144,255,0.1)',
+                tension: 0.3,
+                fill: true
+              }]
+            }
+          }
+        );
+      } else {
+        modalChart.data.datasets[0].label = variableName;
+        modalChart.data.labels = [];
+        modalChart.data.datasets[0].data = [];
+        modalChart.update('none');
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('active');
+      selectedVariableName = null;
+    }
+
+    // 弹窗事件监听
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+
+    // 更新变量历史数据 - 增加保存量
+    function updateVariableHistory(data) {
+      const timestamp = new Date().toLocaleTimeString();
+      
+      data.forEach(d => {
+        const name = d.tag_name;
+        if (!variableHistoryData[name]) {
+          variableHistoryData[name] = { timestamps: [], values: [] };
+        }
+        
+        variableHistoryData[name].timestamps.push(timestamp);
+        variableHistoryData[name].values.push(d.value);
+        
+        if (variableHistoryData[name].timestamps.length > 200) {  // 增加到200个点
+          variableHistoryData[name].timestamps.shift();
+          variableHistoryData[name].values.shift();
+        }
+        
+        // 如果是当前选中的变量，实时更新弹窗图表
+        if (selectedVariableName === name && modalChart) {
+          modalChart.data.labels.push(timestamp);
+          modalChart.data.datasets[0].data.push(d.value);
+          if (modalChart.data.labels.length > 200) {
+            modalChart.data.labels.shift();
+            modalChart.data.datasets[0].data.shift();
+          }
+          modalChart.update('none');
+        }
+      });
+    }
+
+    function getSeverityClass(severity) {
+      if (severity === '紧急' || severity === 'emergency') return '';
+      if (severity === '高' || severity === 'high') return '';
+      if (severity === '中' || severity === 'medium' || severity === 'warning') return 'warning';
+      return 'info';
+    }
+
+    function getSeverityDisplay(severity) {
+      const map = {
+        'emergency': '紧急',
+        'high': '高',
+        'medium': '中',
+        'low': '低',
+        'warning': '警告'
+      };
+      return map[severity] || severity;
+    }
+
+    socket.on('data', (packet) => {
+      // 新的数据包格式：{ current_values: {}, history_data: [] }
+      const currentData = Object.values(packet.current_values);
+      const historyData = packet.history_data;
+      
+      dataCount = currentData.length;
+      document.getElementById('data-count').textContent = dataCount;
+
+      updateVariableHistory(currentData);
+      updateVariableGrid(currentData);
+
+      // 处理历史数据 - 遍历所有缓冲的数据点，不丢失任何细节
+      for (const bufferItem of historyData) {
+        const timestamp = new Date(bufferItem.timestamp).toLocaleTimeString();
+        const data = bufferItem.data;
+        
+        // 查找需要的5个变量
+        const oilTemp = data.find(d => d.tag_name === '油温传感器');
+        const waterTemp = data.find(d => d.tag_name === '水温传感器');
+        const pressure = data.find(d => d.tag_name === '滑块总压力T');
+        const position = data.find(d => d.tag_name === '滑块实际位移');
+        const speed = data.find(d => d.tag_name === '滑块速度');
+
+        // 更新油温图表
+        oilTempChart.data.labels.push(timestamp);
+        oilTempChart.data.datasets[0].data.push(oilTemp ? oilTemp.value : 0);
+        if (oilTempChart.data.labels.length > 200) {  // 增加到200个点，覆盖8.5S节拍的20倍
+          oilTempChart.data.labels.shift();
+          oilTempChart.data.datasets[0].data.shift();
+        }
+
+        // 更新水温图表
+        waterTempChart.data.labels.push(timestamp);
+        waterTempChart.data.datasets[0].data.push(waterTemp ? waterTemp.value : 0);
+        if (waterTempChart.data.labels.length > 200) {
+          waterTempChart.data.labels.shift();
+          waterTempChart.data.datasets[0].data.shift();
+        }
+
+        // 更新总压力图表
+        pressureChart.data.labels.push(timestamp);
+        pressureChart.data.datasets[0].data.push(pressure ? pressure.value : 0);
+        if (pressureChart.data.labels.length > 200) {
+          pressureChart.data.labels.shift();
+          pressureChart.data.datasets[0].data.shift();
+        }
+
+        // 更新滑块位置图表
+        positionChart.data.labels.push(timestamp);
+        positionChart.data.datasets[0].data.push(position ? position.value : 0);
+        if (positionChart.data.labels.length > 200) {
+          positionChart.data.labels.shift();
+          positionChart.data.datasets[0].data.shift();
+        }
+
+        // 更新滑块速度图表
+        speedChart.data.labels.push(timestamp);
+        speedChart.data.datasets[0].data.push(speed ? speed.value : 0);
+        if (speedChart.data.labels.length > 200) {
+          speedChart.data.labels.shift();
+          speedChart.data.datasets[0].data.shift();
+        }
+      }
+
+      // 更新所有图表
+      oilTempChart.update('none');
+      waterTempChart.update('none');
+      pressureChart.update('none');
+      positionChart.update('none');
+      speedChart.update('none');
+    });
+
+    function updateVariableGrid(data) {
+      const grid = document.getElementById('variable-grid');
+      grid.innerHTML = '';
+      
+      data.slice(0, 40).forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'variable-item';
+        const name = item.tag_name || `地址${item.address}`;
+        const val = item.value;
+        let valClass = '';
+        let displayVal = val;
+        
+        if (typeof val === 'boolean' || val === 0 || val === 1) {
+          displayVal = val === 1 ? 'ON' : 'OFF';
+          valClass = val === 1 ? 'true' : 'false';
+        } else if (typeof val === 'number') {
+          displayVal = val.toFixed(2);
+        }
+        
+        div.innerHTML = `
+          <div class="variable-name">${name}</div>
+          <div class="variable-value ${valClass}">${displayVal}</div>
+        `;
+        
+        // 添加点击事件
+        div.addEventListener('click', () => {
+          openModal(name);
+        });
+        
+        grid.appendChild(div);
+      });
+    }
+
+    socket.on('fault', (fault) => {
+      faultCount++;
+      document.getElementById('fault-count').textContent = faultCount;
+
+      const list = document.getElementById('fault-list');
+      if (list.querySelector('p')) {
+        list.innerHTML = '';
+      }
+
+      const item = document.createElement('div');
+      item.className = `fault-item ${getSeverityClass(fault.severity)}`;
+      item.innerHTML = `
+        <div class="fault-title">[${fault.severity}] ${fault.fault_name}</div>
+        <div class="fault-desc">${fault.description}</div>
+        <div class="fault-time">${fault.timestamp}</div>
+      `;
+      list.insertBefore(item, list.firstChild);
+
+      if (list.children.length > 10) {
+        list.removeChild(list.lastChild);
+      }
+    });
+
+    socket.on('anomaly', (anomaly) => {
+      anomalyCount++;
+      document.getElementById('anomaly-count').textContent = anomalyCount;
+
+      const list = document.getElementById('anomaly-list');
+      if (list.querySelector('p')) {
+        list.innerHTML = '';
+      }
+
+      const item = document.createElement('div');
+      item.className = 'fault-item warning';
+      item.innerHTML = `
+        <div class="fault-title">${anomaly.tag_name || `DB${anomaly.db_number}:${anomaly.address}`}</div>
+        <div class="fault-desc">${anomaly.message}</div>
+        <div class="fault-time">置信度: ${(anomaly.confidence * 100).toFixed(0)}%</div>
+      `;
+      list.insertBefore(item, list.firstChild);
+
+      if (list.children.length > 10) {
+        list.removeChild(list.lastChild);
+      }
+    });
+
+    // 处理Drools规则故障
+    socket.on('drools_result', (fault) => {
+      faultCount++;
+      document.getElementById('fault-count').textContent = faultCount;
+
+      const list = document.getElementById('fault-list');
+      if (list.querySelector('p')) {
+        list.innerHTML = '';
+      }
+
+      const item = document.createElement('div');
+      item.className = `fault-item ${getSeverityClass(fault.severity)}`;
+      const timestamp = fault.timestamp ? new Date(fault.timestamp * 1000).toLocaleString() : '';
+      item.innerHTML = `
+        <div class="fault-title">[${getSeverityDisplay(fault.severity)}] ${fault.name || fault.rule_id}</div>
+        <div class="fault-desc">${fault.description || ''}${fault.slider_speed !== undefined ? ' (速度: ' + fault.slider_speed.toFixed(2) + ')' : ''}</div>
+        <div class="fault-time">${timestamp}</div>
+      `;
+      list.insertBefore(item, list.firstChild);
+
+      if (list.children.length > 10) {
+        list.removeChild(list.lastChild);
+      }
+    });
+
+    // 处理滑块下行异常
+    socket.on('slider_fault', (fault) => {
+      faultCount++;
+      document.getElementById('fault-count').textContent = faultCount;
+
+      const list = document.getElementById('fault-list');
+      if (list.querySelector('p')) {
+        list.innerHTML = '';
+      }
+
+      const item = document.createElement('div');
+      item.className = 'fault-item'; // 滑块异常默认紧急
+      const timestamp = fault.timestamp ? new Date(fault.timestamp * 1000).toLocaleString() : '';
+      
+      let conditionsHtml = '';
+      if (fault.unsatisfied_conditions && fault.unsatisfied_conditions.length > 0) {
+        conditionsHtml = '<div style="margin-top:8px;font-size:13px;color:#666;">不满足条件：' + 
+          fault.unsatisfied_conditions.map(c => c.name).join('、') + '</div>';
+      }
+      
+      item.innerHTML = `
+        <div class="fault-title">[紧急] 滑块下行异常</div>
+        <div class="fault-desc">${fault.description || '检测到滑块下行指令但前置条件不满足'}</div>
+        ${fault.elapsed_time !== undefined ? `<div style="margin-top:8px;font-size:13px;color:#666;">已过时间: ${fault.elapsed_time.toFixed(1)}秒 / 容忍时间: ${(fault.delay_tolerance + fault.error_tolerance).toFixed(1)}秒</div>` : ''}
+        ${conditionsHtml}
+        <div class="fault-time">${timestamp}</div>
+      `;
+      list.insertBefore(item, list.firstChild);
+
+      if (list.children.length > 10) {
+        list.removeChild(list.lastChild);
+      }
+    });
+
+    function getColor(index) {
+      const colors = [
+        '#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1',
+        '#13c2c2', '#eb2f96', '#fa541c'
+      ];
+      return colors[index % colors.length];
+    }
+
+    async function checkStatus() {
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        const statusElement = document.getElementById('connection-status');
+        if (data.connected) {
+          statusElement.className = 'value status-connected';
+          statusElement.textContent = '已连接';
+        } else {
+          statusElement.className = 'value status-disconnected';
+          statusElement.textContent = '未连接';
+        }
+      } catch (e) {
+        console.error('获取状态失败', e);
+      }
+    }
+
+    setInterval(checkStatus, 3000);
+    checkStatus();
+  </script>
+</body>
+</html>

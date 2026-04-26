@@ -1,0 +1,21 @@
+class Config:
+    PLC_HOST = '172.15.14.150'
+    PLC_RACK = 0
+    PLC_SLOT = 1
+    PLC_CONNECTION_TIMEOUT = 5000
+    PLC_RETRY_INTERVAL = 3000
+    
+    DATA_SAMPLING_INTERVAL = 100
+    DATA_HISTORY_DAYS = 30
+    
+    ANALYSIS_WINDOW_SIZE = 60
+    ANALYSIS_THRESHOLD = 0.8
+    ANALYSIS_PREDICTION_INTERVAL = 5000
+    
+    SERVER_PORT = 3000
+    SERVER_HOST = '0.0.0.0'
+    
+    LOGGING_LEVEL = 'info'
+    LOGGING_FILE = './logs/app.log'
+
+config = Config()
