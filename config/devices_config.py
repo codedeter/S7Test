@@ -1,0 +1,364 @@
+import os
+from typing import Dict, List
+from src.devices.device_config import (
+    DeviceConfig, DeviceType, DataBlock, DBVariable, AreaVariable
+)
+from src.parsers.db_file_parser import DBFileParser, parse_db_files_in_directory
+from src.parsers.xlsx_variable_parser import XLSXVariableParser
+
+
+DEFAULT_DEVICES: List[Dict] = [
+    {
+        'device_id': 'plc_001',
+        'device_name': 'RXA1300压机PLC',
+        'device_type': DeviceType.PLC_S7_1500,
+        'ip_address': '172.15.14.150',
+        'rack': 0,
+        'slot': 1,
+        'db_definitions': [
+            {
+                'db_number': 1,
+                'bool_vars': {
+                    0: [(0, '保压选择'), (1, '双手合格'), (2, '电机启动主控'), (3, '滑块上限'),
+                        (4, '关断上循环泵'), (5, '反行程检查'), (6, '允许下行'), (7, '回程停止位1')],
+                    1: [(0, '回程停止位2'), (1, '回程停止位3'), (2, '回程停止位4'), (3, '滑块快转慢位'),
+                        (4, '滑块下限位'), (5, '压制力达到'), (6, '主缸泄压到位'), (7, '滑块合模位')],
+                    2: [(0, '移动台机内落下到位指示'), (1, '移动台机内提升到位指示'),
+                        (2, '移动台移入到位指示'), (3, '下行主控'), (4, '滑块下行前条件检查'),
+                        (5, '保压'), (6, '泄压'), (7, '静止按钮')],
+                    3: [(0, '回程按钮'), (1, '滑块下行'), (2, '单次连续压制力到达'), (3, '回程主控'),
+                        (4, '锁紧松开驱动滑块回程'), (5, '滑块回程准备'), (6, '滑块回程'), (7, '润滑安全条件')],
+                    4: [(0, '开机润滑完成'), (1, '开机润滑'), (2, '润滑次数到'), (3, '润滑泵开始运行'),
+                        (4, '锁紧准备'), (5, '松开准备'), (6, '锁紧松开不在上极限时先驱'), (7, '左移动台故障')],
+                    5: [(0, '班产复位'), (1, '气阀手动顶出'), (2, '动态调压启用'), (3, '二次泄压启用'),
+                        (4, '锁紧到位'), (5, '松开到位'), (6, '压制力达到指示'), (7, '气阀手动退回')],
+                    6: [(0, '润滑上升沿'), (1, '电磁铁主控'), (2, '驱动器正常'), (3, '系统Error'),
+                        (4, '润滑强制开启'), (5, '上循环强制开启'), (6, '下循环强制开启'), (7, '弹出急停画面')],
+                    7: [(0, '关闭上油加热'), (1, '移动台夹紧力上限'), (2, '移动台夹紧力下限'), (3, '延时移出移动台'),
+                        (4, '延时移入移动台'), (5, '打开充液阀'), (6, '下模夹紧压力达到'), (7, '上模夹紧压力达到')],
+                    8: [(0, '合模位'), (1, '滑块慢下'), (2, '二次泄压位'), (3, '70%切泵'),
+                        (4, '80%切泵'), (5, '90%切泵'), (6, '90%关断泵口'), (7, '3Y1')],
+                    9: [(0, '3Y6.2开启'), (1, '动态切缸'), (2, '油阀手动顶出'), (3, '油阀手动退回'),
+                        (4, '启动电机过渡2M1'), (5, '启动电机过渡2M2'), (6, '启动电机过渡2M3'), (7, '启动电机过渡2M4')],
+                    10: [(0, '关断下循环泵'), (1, '安全爪主控'), (2, '安全爪打开到位'), (3, '安全爪回程'),
+                        (4, '安全爪关闭到位'), (5, '移动台合格'), (6, '启用主台'), (7, '启用副台')],
+                    11: [(0, '远程调压启用'), (1, '移动台提升到位指示'), (2, '移动台落下到位指示'),
+                        (3, '控制5Y1压力'), (4, '移动台夹紧压力上限'), (5, '移动台夹紧压力下限'),
+                        (6, '夹紧置位'), (7, '提升落下主控')],
+                    12: [(0, '移入移出主控'), (1, '左移入准备'), (2, '左移出准备'), (3, '右移入准备'),
+                        (4, '右移出准备'), (5, '左移出慢速'), (6, '左移入慢速'), (7, '右移出慢速')],
+                    13: [(0, '右移入慢速'), (1, '左台慢速'), (2, '右台慢速'), (3, '回程启动垫位'),
+                        (4, '垫顶出钮'), (5, '垫退回钮'), (6, '选择液压垫'), (7, '选择顶出器')],
+                    14: [(0, '左前双手合格'), (1, '左后双手合格'), (2, '右前双手合格'), (3, '右后双手合格'),
+                        (4, '急停合格'), (5, '安全栓退回到位'), (6, '安全栓移入到位'), (7, '一缸')],
+                    15: [(0, '两缸'), (1, '左前按钮站选择'), (2, '左后按钮站选择'), (3, '右前按钮站选择'),
+                        (4, '右后按钮站选择'), (5, '左台气阀测试顶出'), (6, '右台气阀测试顶出'), (7, '左台下模泄压')],
+                    16: [(0, '右台下模泄压'), (1, '左台下模夹紧力到达'), (2, '右台下模夹紧力到达'),
+                        (3, '左台下模夹紧'), (4, '右台下模夹紧'), (5, '使用夹板'), (6, '左模具有料'), (7, '左模具无料')],
+                    17: [(0, '右模具有料'), (1, '右模具无料'), (2, '左模具板料检测信号不合格'),
+                        (3, '右模具板料检测信号不合格'), (4, '左台车变频器复位'), (5, '右台车变频器复位'),
+                        (6, '左光栅复位'), (7, '右光栅复位')],
+                },
+                'int_vars': {
+                    32: ('压机模式', 'Int'), 36: ('润滑次数', 'DInt'), 40: ('润滑时间', 'DInt'),
+                    44: ('油超温温度', 'Real'), 48: ('油需冷却温度', 'Real'), 72: ('上油加热关闭温度', 'Real'),
+                    76: ('上油需加热温度', 'Real'),
+                }
+            },
+            {
+                'db_number': 10,
+                'size': 105,
+                'real_vars': {
+                    0: ('2M1实时电机速度', 'Real'), 4: ('2M2实时电机速度', 'Real'), 8: ('2M3实时电机速度', 'Real'),
+                    12: ('2M4实时电机速度', 'Real'), 16: ('液压垫位移传感器', 'Real'), 20: ('压力传感器3S201', 'Real'),
+                    24: ('压力传感器3S202', 'Real'), 28: ('油温传感器', 'Real'), 32: ('压力传感器3S203', 'Real'),
+                    36: ('水温传感器', 'Real'), 40: ('流量传感器', 'Real'), 44: ('垫压力传感器4B201', 'Real'),
+                    48: ('垫压力传感器4B202', 'Real'), 52: ('移动台提升压力Mpa', 'Real'), 56: ('移动台压力传感器', 'Real'),
+                    60: ('4B201压力显示T', 'Real'), 64: ('4B202压力显示T', 'Real'), 68: ('滑块实际位移', 'Real'),
+                    72: ('滑块中间缸压力T', 'Real'), 76: ('滑块侧缸压力T', 'Real'), 80: ('滑块总压力T', 'Real'),
+                    84: ('滑块速度', 'Real'), 88: ('垫压力', 'Real'), 96: ('左台变频器转速', 'Real'),
+                    100: ('右台变频器转速', 'Real'), 108: ('3Y10压力反馈', 'Real'),
+                },
+                'int_vars': {
+                    92: ('保压时间', 'Int'), 104: ('顶出时间', 'Int'),
+                    112: ('左气阀顶出时间', 'Int'), 114: ('右气阀顶出时间', 'Int'),
+                }
+            }
+        ]
+    },
+    {
+        'device_id': 'plc_002',
+        'device_name': 'RXB800压机PLC',
+        'device_type': DeviceType.PLC_S7_1500,
+        'ip_address': '172.16.15.111',
+        'rack': 0,
+        'slot': 1,
+        'db_definitions': [
+            {
+                'db_number': 1,
+                'size': 83,
+                'bool_vars': {
+                    0: [(0, '保压选择'), (1, '双手合格'), (2, '电机启动主控'), (3, '滑块上限'),
+                        (4, '关断上循环泵'), (5, '反行程检查'), (6, '允许下行'), (7, '回程停止位1')],
+                    1: [(0, '回程停止位2'), (1, '回程停止位3'), (2, '滑块快转慢位'), (3, '滑块下限位'),
+                        (4, '压制力达到'), (5, '主缸泄压到位'), (6, '滑块合模位'), (7, '移动台落下到位指示')],
+                    2: [(0, '移动台提升到位指示'), (1, '移动台移入到位指示'), (2, '下行主控'), (3, '滑块下行前条件检查'),
+                        (4, '保压'), (5, '泄压'), (6, '静止按钮'), (7, '回程按钮')],
+                    3: [(0, '滑块下行'), (1, '单次连续压制力到达'), (2, '回程主控'), (3, '锁紧松开驱动滑块回程'),
+                        (4, '滑块回程准备'), (5, '滑块回程'), (6, '润滑安全条件'), (7, '开机润滑完成')],
+                    4: [(0, '开机润滑'), (1, '润滑次数到'), (2, '润滑泵开始运行'), (3, '锁紧准备'),
+                        (4, '松开准备'), (5, '锁紧松开不在上极限时先驱'), (6, '安全门按钮.左安全门上升'), (7, '安全门按钮.左安全门下降')],
+                    5: [(0, '安全门按钮.右安全门上升'), (1, '安全门按钮.右安全门下降'), (2, '左移动台故障'), (3, '班产复位'),
+                        (4, '气阀手动顶出'), (5, '动态调压启用'), (6, '二次泄压启用'), (7, '锁紧到位')],
+                    6: [(0, '松开到位'), (1, '压制力达到指示'), (2, '气阀手动退回'), (3, '润滑上升沿'), (4, '电磁铁主控')],
+                    9: [(0, '驱动器正常'), (1, '系统Error')],
+                    26: [(0, '润滑强制开启'), (1, '上循环强制开启'), (2, '下循环强制开启'), (3, '弹出急停画面'),
+                        (4, 'HMI开关.左前模具照明'), (5, 'HMI开关.左后模具照明'), (6, 'HMI开关.右前模具照明'), (7, 'HMI开关.右后模具照明')],
+                    27: [(0, 'HMI开关.机床照明'), (1, 'HMI开关.上油加热手动'), (2, 'HMI开关.下油加热手动'),
+                        (3, 'HMI开关.工作台落下按钮'), (4, 'HMI开关.工作台提升按钮'), (5, 'HMI开关.移动台选择'),
+                        (6, 'HMI开关.移出按钮'), (7, 'HMI开关.移入按钮')],
+                    28: [(0, 'HMI开关.选择左安全门'), (1, 'HMI开关.选择右安全门'), (2, 'HMI开关.拉伸垫模式'), (3, 'HMI开关.顶出器模式')],
+                    37: [(0, '关闭上油加热'), (1, '移动台夹紧力上限'), (2, '移动台夹紧力下限'), (3, '延时移出移动台'),
+                        (4, '延时移入移动台'), (5, '打开充液阀'), (6, '下模夹紧压力达到'), (7, '上模夹紧压力达到')],
+                    38: [(0, '合模位'), (1, '滑块慢下'), (2, '二次泄压位'), (3, '70%切泵'), (4, '%90切泵'),
+                        (5, '%90关断泵口'), (6, '3Y1'), (7, '3Y6.2开启')],
+                    39: [(0, '动态切缸'), (1, '油阀手动顶出'), (2, '油阀手动退回'),
+                        (3, '夹紧器.前进到位'), (4, '夹紧器.退回到位'), (5, '夹紧器.进先松'), (6, '夹紧器.退先松'), (7, '夹紧器.上模夹紧')],
+                    40: [(0, '夹紧器.上模松开'), (1, '夹紧器.夹紧器前进'), (2, '夹紧器.夹紧器后退'),
+                        (3, '夹紧器.松模输出.1'), (4, '夹紧器.松模输出.2'), (5, '夹紧器.松模输出.3'),
+                        (6, '夹紧器.松模输出.4'), (7, '夹紧器.松模输出.5')],
+                    41: [(0, '夹紧器.松模输出.6'), (1, '夹紧器.松模输出.7'), (2, '夹紧器.松模输出.8'),
+                        (3, '夹紧器.松模输出.9'), (4, '夹紧器.松模输出.10'), (5, '夹紧器.松模输出.11'),
+                        (6, '夹紧器.松模输出.12'), (7, '夹紧器.模具前进保持后退主控')],
+                },
+                'int_vars': {
+                    7: ('压机模式', 'Int'),
+                    10: ('润滑次数', 'DInt'),
+                    14: ('润滑时间', 'DInt'),
+                    18: ('油超温温度', 'Real'),
+                    22: ('油需冷却温度', 'Real'),
+                    29: ('上油加热关闭温度', 'Real'),
+                    33: ('上油需加热温度', 'Real'),
+                },
+            },
+            {
+                'db_number': 10,
+                'size': 105,
+                'real_vars': {
+                    0: ('滑块左位移', 'Real'), 4: ('滑块右位移', 'Real'), 8: ('3Y10压力Mpa', 'Real'),
+                    12: ('主缸压力Mpa', 'Real'), 16: ('侧缸压力Mpa', 'Real'), 20: ('上油箱油温', 'Real'),
+                    24: ('移动台夹紧压力Mpa', 'Real'), 28: ('2M1实时电机速度', 'Real'), 32: ('2M2实时电机速度', 'Real'),
+                    36: ('冷却水温度', 'Real'), 40: ('水流量', 'Real'),
+                    44: ('滑块实际位移', 'Real'), 48: ('滑块中间缸压力T', 'Real'), 52: ('滑块侧缸压力T', 'Real'),
+                    56: ('滑块总压T', 'Real'), 60: ('滑块速度', 'Real'), 64: ('左变频器转速显示', 'Real'),
+                    68: ('右变频器转速显示', 'Real'), 72: ('左缓冲转速', 'Real'), 76: ('右缓冲转速', 'Real'),
+                    80: ('3Y10压力T', 'Real'), 84: ('压力滤波显示', 'Real'), 88: ('左缓冲位置', 'Real'),
+                    92: ('右缓冲位置', 'Real'),
+                },
+                'int_vars': {
+                    44: ('保压时间', 'Int'),
+                    48: ('左气阀顶出时间', 'Int'), 50: ('右气阀顶出时间', 'Int'),
+                },
+                'dint_vars': {
+                    96: ('缓冲时间', 'DInt'),
+                },
+            },
+            {
+                'db_number': 51,
+                'size': 11,
+                'bool_vars': {
+                    0: [(0, '上油箱油温过低'), (1, '上油箱油需冷却'), (2, '上油箱油温过高'), (3, '上油箱滤油受阻'),
+                        (4, '上油箱油空'), (5, '上油箱需补油'), (6, '润滑泵滤油器堵塞'), (7, '辅助油路滤油堵塞')],
+                    1: [(0, '流量阀滤油堵塞'), (1, '伺服阀滤油堵塞'), (2, '3Y4滤油受阻'), (3, '润滑液位低故障'),
+                        (4, '操作站急停不合格'), (5, '左前立柱急停不合格'), (6, '右后立柱急停不合格'), (7, '左后立柱急停不合格')],
+                    2: [(0, '右前立柱急停不合格'), (1, '前按钮站急停不合格'), (2, '后按钮站急停不合格'), (3, '左光幕不合格'),
+                        (4, '右光幕不合格'), (5, '位移偏差不合格'), (6, '滑块处于上极限'), (7, '滑块处于下极限')],
+                    3: [(0, '操作台静止按下'), (1, '闸阀3S113关闭'), (2, '闸阀3S114关闭'), (3, '闸阀3S115关闭'),
+                        (4, '5Q1电源未接通'), (5, '提升夹紧截止阀未打开到位'), (6, '充液截止阀1位打开到位'), (7, '充液截止阀2位打开到位')],
+                    4: [(0, '充液截止阀3位打开到位'), (1, '上模夹紧泵站液位低'), (2, 'PLC网络故障'), (3, '动力柜网络故障'),
+                        (4, '操作站网络故障'), (5, '底梁网络故障'), (6, '上梁网络故障'), (7, '下油箱网络故障')],
+                    5: [(0, '滑块网络故障'), (1, '滑块左位移传感器网络故障'), (2, '左G120网络故障'), (3, '左变频器故障'),
+                        (4, '右变频器故障'), (5, '左缓冲变频器故障'), (6, '右缓冲变频器故障'), (7, '2Q1电源未接通')],
+                    6: [(0, '2Q2电源未接通'), (1, '4Q1电源未接通'), (2, '4Q2电源未接通'), (3, '2Q7电源未接通'),
+                        (4, '5Q2电源未接通'), (5, '5Q3电源未接通'), (6, '7Q1电源未接通'), (7, '1Q3电源未接通')],
+                    7: [(0, '2Q5电源未接通'), (1, '14Q1电源未接通'), (2, '1Q10电源未接通'), (3, '1Q11电源未接通'),
+                        (4, '1Q12电源未接通'), (5, '8Q1电源未接通'), (6, '8Q2电源未接通'), (7, '电能表网络故障')],
+                    8: [(0, '滑块位移传感器网络故障'), (1, '左缓冲变频器网络故障'), (2, '右缓冲变频器网络故障'),
+                        (3, '移动台变频器网络故障'), (4, '左移动台变频器网络故障'),
+                        (5, '右移动台变频器传感器网络故障'), (6, '左缓冲编码器网络故障'), (7, '右缓冲编码器网络故障')],
+                    9: [(0, '2KM1电源未接通'), (1, '2KM2电源未接通'), (2, '2M1伺服故障报警'), (3, '2M2伺服故障报警'),
+                        (4, '滑块下滑报警'), (5, '左缓冲位置与配方不匹配'), (6, '右缓冲位置与配方不匹配'),
+                        (7, '左前按钮需更换')],
+                    10: [(0, '右前按钮需更换'), (1, '左后按钮需更换'), (2, '右后按钮需更换'),
+                        (3, '获取MES当前计划数量为0'), (4, '获取MES无订单'), (5, '与MES握手失败'), (6, '左安全门上升'), (7, '左安全门下降')],
+                },
+            },
+        ]
+    },
+]
+
+
+def load_devices_from_db_files(db_directory: str) -> Dict[int, DataBlock]:
+    if not os.path.exists(db_directory):
+        print(f"DB directory not found: {db_directory}")
+        return {}
+
+    blocks = parse_db_files_in_directory(db_directory)
+    result = {}
+
+    for db_num, parsed_db in blocks.items():
+        variables = []
+        for var in parsed_db.variables:
+            variables.append(DBVariable(
+                name=var.name,
+                address=var.byte_offset,
+                data_type=var.data_type,
+                bit_offset=var.bit_offset,
+                struct_name=var.struct_name
+            ))
+
+        result[db_num] = DataBlock(
+            number=db_num,
+            name=parsed_db.name,
+            variables=variables,
+            size=parsed_db.total_size
+        )
+
+    return result
+
+
+def load_devices_from_xlsx(xlsx_path: str, sheet_name: str = None) -> Dict[str, AreaVariable]:
+    if not os.path.exists(xlsx_path):
+        print(f"XLSX file not found: {xlsx_path}")
+        return {}
+
+    parser = XLSXVariableParser()
+    variables = parser.parse_xlsx(xlsx_path, sheet_name)
+
+    m_vars = {}
+    i_vars = {}
+    q_vars = {}
+
+    for name, var in variables.items():
+        area_var = AreaVariable(
+            name=var.name,
+            area=var.area,
+            offset=var.byte_offset,
+            data_type=var.data_type,
+            bit_offset=var.bit_offset or 0
+        )
+
+        if var.area == 'M':
+            m_vars[name] = area_var
+        elif var.area == 'I':
+            i_vars[name] = area_var
+        elif var.area == 'Q':
+            q_vars[name] = area_var
+
+    return {'M': m_vars, 'I': i_vars, 'Q': q_vars}
+
+
+def create_device_configs() -> List[DeviceConfig]:
+    configs = []
+
+    for device_def in DEFAULT_DEVICES:
+        db_list = []
+
+        for db_def in device_def.get('db_definitions', []):
+            db_vars = []
+
+            bool_vars = db_def.get('bool_vars', {})
+            for byte_addr, bits in bool_vars.items():
+                for bit_offset, var_name in bits:
+                    db_vars.append(DBVariable(
+                        name=var_name,
+                        address=byte_addr,
+                        data_type='BOOL',
+                        bit_offset=bit_offset
+                    ))
+
+            int_vars = db_def.get('int_vars', {})
+            for addr, (var_name, var_type) in int_vars.items():
+                db_vars.append(DBVariable(
+                    name=var_name,
+                    address=addr,
+                    data_type=var_type
+                ))
+
+            real_vars = db_def.get('real_vars', {})
+            for addr, (var_name, var_type) in real_vars.items():
+                db_vars.append(DBVariable(
+                    name=var_name,
+                    address=addr,
+                    data_type=var_type
+                ))
+
+            dint_vars = db_def.get('dint_vars', {})
+            for addr, (var_name, var_type) in dint_vars.items():
+                db_vars.append(DBVariable(
+                    name=var_name,
+                    address=addr,
+                    data_type=var_type
+                ))
+
+            db_list.append(DataBlock(
+                number=db_def['db_number'],
+                name=f"DB{db_def['db_number']}",
+                variables=db_vars,
+                size=db_def.get('size', 0)
+            ))
+
+        config = DeviceConfig(
+            device_id=device_def['device_id'],
+            device_name=device_def['device_name'],
+            device_type=device_def['device_type'],
+            ip_address=device_def['ip_address'],
+            rack=device_def.get('rack', 0),
+            slot=device_def.get('slot', 1),
+            data_blocks=db_list
+        )
+
+        configs.append(config)
+
+    return configs
+
+
+def add_device_config(
+    device_id: str,
+    device_name: str,
+    ip_address: str,
+    device_type: DeviceType = DeviceType.PLC_S7_1500,
+    rack: int = 0,
+    slot: int = 1,
+    data_blocks: List[DataBlock] = None,
+    m_variables: List[AreaVariable] = None,
+    i_variables: List[AreaVariable] = None,
+    q_variables: List[AreaVariable] = None
+) -> DeviceConfig:
+    return DeviceConfig(
+        device_id=device_id,
+        device_name=device_name,
+        device_type=device_type,
+        ip_address=ip_address,
+        rack=rack,
+        slot=slot,
+        data_blocks=data_blocks or [],
+        m_variables=m_variables or [],
+        i_variables=i_variables or [],
+        q_variables=q_variables or []
+    )
+
+
+def remove_device_config(device_id: str):
+    global DEFAULT_DEVICES
+    DEFAULT_DEVICES = [d for d in DEFAULT_DEVICES if d.get('device_id') != device_id]
+
+
+if __name__ == '__main__':
+    configs = create_device_configs()
+    for cfg in configs:
+        print(f"Device: {cfg.device_id} - {cfg.device_name}")
+        print(f"  IP: {cfg.ip_address}")
+        print(f"  Type: {cfg.device_type.value}")
+        print(f"  DataBlocks: {[db.number for db in cfg.data_blocks]}")
+        print()

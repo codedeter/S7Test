@@ -201,6 +201,8 @@ IMPORTANT_TAGS = [
     '安全爪主控',
 ]
 
+plc_tags = PLC_TAG_MAPPING
+
 def get_tag_info(byte_offset):
     """根据字节偏移获取标签信息"""
     return PLC_TAG_MAPPING.get(byte_offset, [f'未定义_{byte_offset}', 'Unknown', 1, 'Unknown'])

@@ -19,6 +19,8 @@ echo [提示] 复制项目文件...
 xcopy "%SOURCE_DIR%config" "%TEMP%\%PACKAGE_NAME%\config\" /e /i /y >nul
 xcopy "%SOURCE_DIR%public" "%TEMP%\%PACKAGE_NAME%\public\" /e /i /y >nul
 xcopy "%SOURCE_DIR%src" "%TEMP%\%PACKAGE_NAME%\src\" /e /i /y >nul
+xcopy "%SOURCE_DIR%tests" "%TEMP%\%PACKAGE_NAME%\tests\" /e /i /y >nul
+xcopy "%SOURCE_DIR%tools" "%TEMP%\%PACKAGE_NAME%\tools\" /e /i /y >nul
 
 copy "%SOURCE_DIR%config\config.py" "%TEMP%\%PACKAGE_NAME%\config\config.py" >nul
 copy "%SOURCE_DIR%config\plc_tags.py" "%TEMP%\%PACKAGE_NAME%\config\plc_tags.py" >nul
@@ -44,7 +46,7 @@ copy "%SOURCE_DIR%PLCValues.xlsx" "%TEMP%\%PACKAGE_NAME%\PLCValues.xlsx" >nul 2>
 :: 创建部署目录结构说明
 echo [提示] 创建目录结构...
 (
-echo PLCMonitor/
+echo S7Test/
 echo ├── config/              # 配置文件
 echo ├── public/              # 前端页面
 echo ├── src/                # 源代码
@@ -52,6 +54,9 @@ echo │   ├── analysis/        # 数据分析
 echo │   ├── api/            # API路由
 echo │   ├── data/           # 数据存储
 echo │   └── plc/            # PLC通信
+echo ├── tests/              # 测试脚本
+echo ├── tools/              # 工具脚本
+echo ├── logs/               # 日志目录
 echo ├── requirements.txt     # Python依赖
 echo ├── start.bat           # Windows启动
 echo ├── start.sh           # Linux启动

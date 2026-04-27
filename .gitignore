@@ -24,6 +24,7 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
 
 # IDE
 .vscode/
@@ -39,6 +40,10 @@ ENV/
 GLABAL.db
 database.db
 
+# Logs
+logs/
+*.log
+
 # Excel
 *.xlsx
 
@@ -50,3 +55,7 @@ yarn.lock
 # OS files
 .DS_Store
 Thumbs.db
+
+# Temp files
+*.tmp
+*.bak

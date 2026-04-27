@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PLC数据监控系统</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>PLC数据监控系统 v3</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js?v=3"></script>
+  <script src="https://cdn.socket.io/4.0.0/socket.io.min.js?v=3"></script>
   <style>
     * {
       margin: 0;
@@ -219,12 +222,108 @@
     .modal-chart {
       height: 350px;
     }
+    .device-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    .device-btn {
+      padding: 8px 16px;
+      background-color: #f0f0f0;
+      border: 2px solid #e8e8e8;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .device-btn:hover {
+      border-color: #1890ff;
+    }
+    .device-btn.active {
+      background-color: #1890ff;
+      color: white;
+      border-color: #1890ff;
+    }
+    .device-btn .device-name {
+      font-weight: bold;
+    }
+    .device-btn .device-ip {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    .device-btn .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .device-btn .status-dot.connected {
+      background-color: #52c41a;
+    }
+    .device-btn .status-dot.disconnected {
+      background-color: #f5222d;
+    }
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #1890ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .loading-text {
+      color: white;
+      margin-top: 15px;
+      font-size: 18px;
+    }
+    .loading-countdown {
+      color: #52c41a;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
+  <div style="background: #00a8ff; color: white; padding: 15px; text-align: center; font-size: 18px; font-weight: bold;">
+    🚀 新版本已加载 v3 | 请检查浏览器控制台
+  </div>
   <div class="header">
-    <h1>🔧 PLC数据监控系统</h1>
+    <h1>🔧 PLC数据监控系统 v3</h1>
     <p style="margin-top: 8px; opacity: 0.9">实时数据采集与故障分析</p>
+  </div>
+
+  <div class="device-selector" id="device-selector">
+    <div class="device-btn active" data-device-id="all">
+      <span class="status-dot connected"></span>
+      <span class="device-name">全部设备</span>
+    </div>
+  </div>
+
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">设备切换中，正在采集数据...</div>
+    <div class="loading-countdown" id="loading-countdown">3</div>
   </div>
 
   <div class="status-bar">
@@ -318,125 +417,184 @@
   </div>
 
   <script>
-    const socket = io();
+    console.log('Frontend: Initializing...');
+    const socket = io({
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000
+    });
+
     let dataCount = 0;
     let faultCount = 0;
     let anomalyCount = 0;
+    let currentDeviceId = 'all';
+    let devices = [];
 
-    // 图表配置 - 放在最前面！
-    const chartConfig = {
-      type: 'line',
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: false
+    socket.on('connect', () => {
+      console.log('Frontend: Socket connected successfully, id:', socket.id);
+    });
+    socket.on('disconnect', (reason) => {
+      console.log('Frontend: Socket disconnected:', reason);
+    });
+    socket.on('connect_error', (error) => {
+      console.error('Frontend: Socket connection error:', error);
+    });
+
+    // 加载设备列表
+    async function loadDevices() {
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        if (data.devices) {
+          devices = data.devices;
+          updateDeviceSelector();
+        }
+      } catch (e) {
+        console.error('Failed to load devices', e);
+      }
+    }
+
+    // 更新设备选择器
+    function updateDeviceSelector() {
+      const selector = document.getElementById('device-selector');
+      selector.innerHTML = `
+        <div class="device-btn ${currentDeviceId === 'all' ? 'active' : ''}" data-device-id="all">
+          <span class="status-dot connected"></span>
+          <span class="device-name">全部设备</span>
+        </div>
+      `;
+
+      devices.forEach(device => {
+        const isConnected = device.status === 'connected';
+        const btn = document.createElement('div');
+        btn.className = `device-btn ${currentDeviceId === device.device_id ? 'active' : ''}`;
+        btn.setAttribute('data-device-id', device.device_id);
+        btn.innerHTML = `
+          <span class="status-dot ${isConnected ? 'connected' : 'disconnected'}"></span>
+          <span class="device-name">${device.device_name}</span>
+          <span class="device-ip">${isConnected ? '在线' : '离线'}</span>
+        `;
+        selector.appendChild(btn);
+      });
+
+      // 添加点击事件
+      document.querySelectorAll('.device-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const newDeviceId = btn.getAttribute('data-device-id');
+          if (newDeviceId !== currentDeviceId) {
+            currentDeviceId = newDeviceId;
+            resetAllCharts();
+            socket.emit('switch_device', { deviceId: currentDeviceId });
+            updateDeviceSelector();
           }
-        },
-        plugins: {
-          legend: {
-            display: true,
-            position: 'bottom'
-          }
-        }
-      }
-    };
+        });
+      });
+    }
 
-    // 油温图表
-    const oilTempChart = new Chart(
-      document.getElementById('oilTempChart'),
-      {
-        ...chartConfig,
-        data: {
-          labels: [],
-          datasets: [{
-            label: '油温(℃)',
-            data: [],
-            borderColor: '#f5222d',
-            backgroundColor: 'rgba(245,34,45,0.1)',
-            tension: 0.3,
-            fill: true
-          }]
-        }
-      }
-    );
+    // 加载提示相关
+    let loadingTimeout = null;
+    let renderEnabled = true;
 
-    // 水温图表
-    const waterTempChart = new Chart(
-      document.getElementById('waterTempChart'),
-      {
-        ...chartConfig,
-        data: {
-          labels: [],
-          datasets: [{
-            label: '水温(℃)',
-            data: [],
-            borderColor: '#1890ff',
-            backgroundColor: 'rgba(24,144,255,0.1)',
-            tension: 0.3,
-            fill: true
-          }]
-        }
-      }
-    );
+    function showLoadingOverlay() {
+      const overlay = document.getElementById('loading-overlay');
+      const countdown = document.getElementById('loading-countdown');
+      overlay.classList.add('active');
+      renderEnabled = false;
 
-    // 总压力图表
-    const pressureChart = new Chart(
-      document.getElementById('pressureChart'),
-      {
-        ...chartConfig,
-        data: {
-          labels: [],
-          datasets: [{
-            label: '总压力(T)',
-            data: [],
-            borderColor: '#faad14',
-            backgroundColor: 'rgba(250,173,20,0.1)',
-            tension: 0.3,
-            fill: true
-          }]
+      let count = 3;
+      countdown.textContent = count;
+
+      const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdown.textContent = count;
+        } else {
+          clearInterval(interval);
         }
+      }, 1000);
+
+      loadingTimeout = setTimeout(() => {
+        overlay.classList.remove('active');
+        renderEnabled = true;
+        countdown.textContent = '3';
+      }, 3000);
+    }
+
+    function hideLoadingOverlay() {
+      const overlay = document.getElementById('loading-overlay');
+      overlay.classList.remove('active');
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+        loadingTimeout = null;
       }
-    );
+      renderEnabled = true;
+    }
 
     // 滑块位置图表
-    const positionChart = new Chart(
-      document.getElementById('positionChart'),
-      {
-        ...chartConfig,
-        data: {
-          labels: [],
-          datasets: [{
-            label: '滑块位置(mm)',
-            data: [],
-            borderColor: '#52c41a',
-            backgroundColor: 'rgba(82,196,26,0.1)',
-            tension: 0.3,
-            fill: true
-          }]
-        }
-      }
-    );
+    let chartConfig = {
+      oilTemp: { tag: '上油箱油温', label: '油温(°C)', color: '#ff4d4f', chart: null },
+      waterTemp: { tag: '冷却水温度', label: '水温(°C)', color: '#1890ff', chart: null },
+      pressure: { tag: '滑块总压T', label: '总压力(T)', color: '#faad14', chart: null },
+      position: { tag: '滑块实际位移', label: '位移(mm)', color: '#52c41a', chart: null },
+      speed: { tag: '滑块速度', label: '速度', color: '#722ed1', chart: null }
+    };
 
-    // 滑块速度图表
-    const speedChart = new Chart(
-      document.getElementById('speedChart'),
-      {
-        ...chartConfig,
-        data: {
-          labels: [],
-          datasets: [{
-            label: '滑块速度',
-            data: [],
-            borderColor: '#722ed1',
-            backgroundColor: 'rgba(114,46,209,0.1)',
-            tension: 0.3,
-            fill: true
-          }]
+    function initCharts() {
+      const chartIds = ['oilTempChart', 'waterTempChart', 'pressureChart', 'positionChart', 'speedChart'];
+      const configs = [
+        { label: '油温(°C)', color: '#ff4d4f', bg: 'rgba(255,77,79,0.1)' },
+        { label: '水温(°C)', color: '#1890ff', bg: 'rgba(24,144,255,0.1)' },
+        { label: '总压力(T)', color: '#faad14', bg: 'rgba(250,173,20,0.1)' },
+        { label: '滑块位置(mm)', color: '#52c41a', bg: 'rgba(82,196,26,0.1)' },
+        { label: '滑块速度', color: '#722ed1', bg: 'rgba(114,46,209,0.1)' }
+      ];
+
+      configs.forEach((cfg, i) => {
+        const canvas = document.getElementById(chartIds[i]);
+        if (canvas) {
+          if (chartConfig[Object.keys(chartConfig)[i]].chart) {
+            chartConfig[Object.keys(chartConfig)[i]].chart.destroy();
+          }
+          chartConfig[Object.keys(chartConfig)[i]].chart = new Chart(canvas, {
+            type: 'line',
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: { beginAtZero: false }
+              },
+              plugins: { legend: { display: true, position: 'bottom' } }
+            },
+            data: {
+              labels: [],
+              datasets: [{
+                label: cfg.label,
+                data: [],
+                borderColor: cfg.color,
+                backgroundColor: cfg.bg,
+                tension: 0.3,
+                fill: true
+              }]
+            }
+          });
         }
-      }
-    );
+      });
+    }
+
+    function resetAllCharts() {
+      Object.keys(chartConfig).forEach(key => {
+        const chart = chartConfig[key].chart;
+        if (chart) {
+          chart.data.labels = [];
+          chart.data.datasets[0].data = [];
+          chart.update('none');
+        }
+      });
+      variableHistoryData = {};
+    }
+
+    // 初始化图表
+    initCharts();
 
     // 弹窗相关变量
     let modalChart = null;
@@ -454,7 +612,17 @@
         modalChart = new Chart(
           document.getElementById('modal-chart'),
           {
-            ...chartConfig,
+            type: 'line',
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: { beginAtZero: false }
+              },
+              plugins: {
+                legend: { display: true, position: 'bottom' }
+              }
+            },
             data: {
               labels: [],
               datasets: [{
@@ -537,79 +705,69 @@
     }
 
     socket.on('data', (packet) => {
-      // 新的数据包格式：{ current_values: {}, history_data: [] }
-      const currentData = Object.values(packet.current_values);
-      const historyData = packet.history_data;
-      
-      dataCount = currentData.length;
-      document.getElementById('data-count').textContent = dataCount;
+      console.log('Frontend: Received data packet', packet);
+      const deviceId = packet.device_id || 'unknown';
+      const currentValues = packet.current_values || {};
+      const historyData = packet.history_data || [];
 
-      updateVariableHistory(currentData);
-      updateVariableGrid(currentData);
-
-      // 处理历史数据 - 遍历所有缓冲的数据点，不丢失任何细节
-      for (const bufferItem of historyData) {
-        const timestamp = new Date(bufferItem.timestamp).toLocaleTimeString();
-        const data = bufferItem.data;
-        
-        // 查找需要的5个变量
-        const oilTemp = data.find(d => d.tag_name === '油温传感器');
-        const waterTemp = data.find(d => d.tag_name === '水温传感器');
-        const pressure = data.find(d => d.tag_name === '滑块总压力T');
-        const position = data.find(d => d.tag_name === '滑块实际位移');
-        const speed = data.find(d => d.tag_name === '滑块速度');
-
-        // 更新油温图表
-        oilTempChart.data.labels.push(timestamp);
-        oilTempChart.data.datasets[0].data.push(oilTemp ? oilTemp.value : 0);
-        if (oilTempChart.data.labels.length > 200) {  // 增加到200个点，覆盖8.5S节拍的20倍
-          oilTempChart.data.labels.shift();
-          oilTempChart.data.datasets[0].data.shift();
-        }
-
-        // 更新水温图表
-        waterTempChart.data.labels.push(timestamp);
-        waterTempChart.data.datasets[0].data.push(waterTemp ? waterTemp.value : 0);
-        if (waterTempChart.data.labels.length > 200) {
-          waterTempChart.data.labels.shift();
-          waterTempChart.data.datasets[0].data.shift();
-        }
-
-        // 更新总压力图表
-        pressureChart.data.labels.push(timestamp);
-        pressureChart.data.datasets[0].data.push(pressure ? pressure.value : 0);
-        if (pressureChart.data.labels.length > 200) {
-          pressureChart.data.labels.shift();
-          pressureChart.data.datasets[0].data.shift();
-        }
-
-        // 更新滑块位置图表
-        positionChart.data.labels.push(timestamp);
-        positionChart.data.datasets[0].data.push(position ? position.value : 0);
-        if (positionChart.data.labels.length > 200) {
-          positionChart.data.labels.shift();
-          positionChart.data.datasets[0].data.shift();
-        }
-
-        // 更新滑块速度图表
-        speedChart.data.labels.push(timestamp);
-        speedChart.data.datasets[0].data.push(speed ? speed.value : 0);
-        if (speedChart.data.labels.length > 200) {
-          speedChart.data.labels.shift();
-          speedChart.data.datasets[0].data.shift();
-        }
+      if (currentDeviceId !== 'all' && currentDeviceId !== deviceId) {
+        return;
       }
 
-      // 更新所有图表
-      oilTempChart.update('none');
-      waterTempChart.update('none');
-      pressureChart.update('none');
-      positionChart.update('none');
-      speedChart.update('none');
+      const filteredData = Object.values(currentValues)
+        .filter(item => item.tag_name)
+        .map(item => ({
+          ...item,
+          tag_name: item.tag_name
+        }));
+
+      if (filteredData.length === 0) {
+        return;
+      }
+
+      dataCount = filteredData.length;
+      document.getElementById('data-count').textContent = dataCount;
+
+      if (!renderEnabled) {
+        return;
+      }
+
+      updateVariableHistory(filteredData);
+      updateVariableGrid(filteredData);
+
+      const timestamp = new Date().toLocaleTimeString();
+
+      Object.keys(chartConfig).forEach(key => {
+        const cfg = chartConfig[key];
+        if (!cfg.chart) return;
+
+        const found = filteredData.find(d => d.tag_name === cfg.tag);
+        const value = found ? found.value : null;
+
+        if (value !== null) {
+          cfg.chart.data.labels.push(timestamp);
+          cfg.chart.data.datasets[0].data.push(value);
+          if (cfg.chart.data.labels.length > 200) {
+            cfg.chart.data.labels.shift();
+            cfg.chart.data.datasets[0].data.shift();
+          }
+        }
+      });
+
+      Object.keys(chartConfig).forEach(key => {
+        if (chartConfig[key].chart) {
+          chartConfig[key].chart.update('none');
+        }
+      });
     });
 
     function updateVariableGrid(data) {
+      console.log('Frontend: Updating variable grid with', data.length, 'data points');
       const grid = document.getElementById('variable-grid');
+      if (!grid) {
+        console.error('Frontend: variable-grid element not found');
+        return;
+      }
       grid.innerHTML = '';
       
       data.slice(0, 40).forEach(item => {
@@ -746,6 +904,75 @@
       }
     });
 
+    // 处理RXB800故障状态（基于DB51）
+    socket.on('fault_status', (faultStatus) => {
+      console.log('Fault status received:', faultStatus);
+
+      const faultDeviceId = faultStatus.device_id || 'unknown';
+      if (currentDeviceId !== 'all' && currentDeviceId !== faultDeviceId) {
+        return;
+      }
+
+      const list = document.getElementById('fault-list');
+
+      if (faultStatus.active_faults && faultStatus.active_faults.length > 0) {
+        faultCount = faultStatus.active_faults.length;
+        document.getElementById('fault-count').textContent = faultCount;
+
+        if (list.querySelector('p')) {
+          list.innerHTML = '';
+        }
+
+        const currentFaultIds = new Set();
+        faultStatus.active_faults.forEach((fault, index) => {
+          const faultName = fault.fault_name || fault;
+          const duration = fault.duration_seconds || 0;
+          const durationStr = formatDuration(duration);
+          const faultId = 'fault-' + faultName.replace(/\s+/g, '_');
+          currentFaultIds.add(faultId);
+
+          let item = document.getElementById(faultId);
+          if (!item) {
+            item = document.createElement('div');
+            item.className = 'fault-item ' + (faultStatus.severity || 'warning');
+            item.id = faultId;
+            item.innerHTML = `
+              <div class="fault-title">[故障] ${faultName}</div>
+              <div class="fault-desc">DB51故障位报警 | 持续: <span class="duration">${durationStr}</span></div>
+              <div class="fault-time">开始: ${fault.start_time || new Date().toLocaleString()}</div>
+            `;
+            list.insertBefore(item, list.firstChild);
+          } else {
+            const durationSpan = item.querySelector('.duration');
+            if (durationSpan) {
+              durationSpan.textContent = durationStr;
+            }
+          }
+        });
+
+        const existingItems = list.querySelectorAll('.fault-item');
+        existingItems.forEach(item => {
+          if (!currentFaultIds.has(item.id)) {
+            item.remove();
+          }
+        });
+      } else {
+        faultCount = 0;
+        document.getElementById('fault-count').textContent = '0';
+        list.innerHTML = '<p style="color: #999; text-align: center;">暂无故障</p>';
+      }
+    });
+
+    function formatDuration(seconds) {
+      if (seconds < 60) {
+        return seconds.toFixed(1) + '秒';
+      } else if (seconds < 3600) {
+        return (seconds / 60).toFixed(1) + '分钟';
+      } else {
+        return (seconds / 3600).toFixed(1) + '小时';
+      }
+    }
+
     function getColor(index) {
       const colors = [
         '#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1',
@@ -759,9 +986,24 @@
         const response = await fetch('/api/status');
         const data = await response.json();
         const statusElement = document.getElementById('connection-status');
-        if (data.connected) {
-          statusElement.className = 'value status-connected';
-          statusElement.textContent = '已连接';
+
+        if (data.devices && data.devices.length > 0) {
+          const connectedCount = data.devices.filter(d => d.status === 'connected').length;
+          const totalCount = data.devices.length;
+
+          if (connectedCount === totalCount) {
+            statusElement.className = 'value status-connected';
+            statusElement.textContent = `已连接 (${connectedCount}/${totalCount})`;
+          } else if (connectedCount > 0) {
+            statusElement.className = 'value status-disconnected';
+            statusElement.textContent = `部分连接 (${connectedCount}/${totalCount})`;
+          } else {
+            statusElement.className = 'value status-disconnected';
+            statusElement.textContent = `未连接 (${connectedCount}/${totalCount})`;
+          }
+
+          devices = data.devices;
+          updateDeviceSelector();
         } else {
           statusElement.className = 'value status-disconnected';
           statusElement.textContent = '未连接';
@@ -771,8 +1013,11 @@
       }
     }
 
+    // 页面加载时获取设备列表
+    loadDevices();
     setInterval(checkStatus, 3000);
     checkStatus();
+    renderEnabled = true;
   </script>
 </body>
 </html>
