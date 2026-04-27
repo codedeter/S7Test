@@ -822,27 +822,44 @@
       }
     });
 
-    socket.on('anomaly', (anomaly) => {
-      anomalyCount++;
-      document.getElementById('anomaly-count').textContent = anomalyCount;
+    socket.on('anomaly_update', (anomaly) => {
+      const anomalyDeviceId = anomaly.device_id || 'unknown';
+      if (currentDeviceId !== 'all' && currentDeviceId !== anomalyDeviceId) {
+        return;
+      }
 
       const list = document.getElementById('anomaly-list');
-      if (list.querySelector('p')) {
-        list.innerHTML = '';
+      const anomalyId = 'anomaly-' + (anomaly.tag_name || anomaly.db_number + '_' + anomaly.address).replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const duration = anomaly.duration_seconds || 0;
+      const durationStr = formatDuration(duration);
+
+      let item = document.getElementById(anomalyId);
+      if (!item) {
+        if (list.querySelector('p')) {
+          list.innerHTML = '';
+        }
+        item = document.createElement('div');
+        item.className = 'fault-item warning';
+        item.id = anomalyId;
+        item.innerHTML = `
+          <div class="fault-title">${anomaly.tag_name || `DB${anomaly.db_number}:${anomaly.address}`}</div>
+          <div class="fault-desc">${anomaly.message || '数据异常'} | 持续: <span class="duration">${durationStr}</span></div>
+          <div class="fault-time">置信度: ${((anomaly.confidence || 0) * 100).toFixed(0)}% | 开始: ${anomaly.start_time || new Date().toLocaleString()}</div>
+        `;
+        list.insertBefore(item, list.firstChild);
+      } else {
+        const durationSpan = item.querySelector('.duration');
+        if (durationSpan) {
+          durationSpan.textContent = durationStr;
+        }
+        const descDiv = item.querySelector('.fault-desc');
+        if (descDiv) {
+          descDiv.innerHTML = `${anomaly.message || '数据异常'} | 持续: <span class="duration">${durationStr}</span>`;
+        }
       }
 
-      const item = document.createElement('div');
-      item.className = 'fault-item warning';
-      item.innerHTML = `
-        <div class="fault-title">${anomaly.tag_name || `DB${anomaly.db_number}:${anomaly.address}`}</div>
-        <div class="fault-desc">${anomaly.message}</div>
-        <div class="fault-time">置信度: ${(anomaly.confidence * 100).toFixed(0)}%</div>
-      `;
-      list.insertBefore(item, list.firstChild);
-
-      if (list.children.length > 10) {
-        list.removeChild(list.lastChild);
-      }
+      anomalyCount = list.children.length;
+      document.getElementById('anomaly-count').textContent = anomalyCount;
     });
 
     // 处理Drools规则故障
