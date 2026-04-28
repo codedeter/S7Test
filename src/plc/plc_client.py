@@ -1,24 +1,47 @@
+"""
+PLC客户端 - 保持向后兼容性
+适配旧API，内部使用device_manager中的PLCClient实现
+"""
 import snap7
 from snap7.util import get_bool, get_int, get_dint, get_real, set_bool, set_int, set_dint, set_real
 import time
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from config.config import config
 
-class PLCClient:
+from config.config import config
+from src.devices.device_config import DeviceConfig, DeviceType
+from src.devices.device_manager import PLCClient as NewPLCClient
+
+
+class LegacyPLCClient:
+    """
+    向后兼容的PLC客户端类
+    为保持旧API兼容性而存在，内部使用新的PLCClient实现
+    """
     def __init__(self):
-        self.client = snap7.client.Client()
+        device_config = DeviceConfig(
+            device_id='legacy_plc',
+            device_name='Legacy PLC',
+            device_type=DeviceType.PLC_S7_1200,
+            ip_address=config.PLC_HOST,
+            rack=config.PLC_RACK,
+            slot=config.PLC_SLOT,
+            retry_interval=config.PLC_RETRY_INTERVAL,
+            enabled=True
+        )
+        self.client = NewPLCClient(device_config)
         self.connected = False
         self.connection_attempts = 0
 
     def connect(self):
         try:
-            self.client.connect(config.PLC_HOST, config.PLC_RACK, config.PLC_SLOT)
-            self.connected = True
+            result = self.client.connect()
+            self.connected = result
             self.connection_attempts = 0
-            print('PLC连接成功')
-            return True
+            if result:
+                print('PLC连接成功')
+            return result
         except Exception as e:
             print(f'PLC连接失败: {e}')
             self.connected = False
@@ -43,9 +66,10 @@ class PLCClient:
     def read_db(self, db_number, start, size):
         if not self.connected:
             raise Exception('PLC未连接')
-
         try:
-            data = self.client.db_read(db_number, start, size)
+            data = self.client.read_db(db_number, start, size)
+            if data is None:
+                raise Exception('读取数据为空')
             return bytes(data)
         except Exception as e:
             print(f'读取DB失败: {e}')
@@ -54,9 +78,10 @@ class PLCClient:
     def read_m(self, start, size):
         if not self.connected:
             raise Exception('PLC未连接')
-
         try:
-            data = self.client.mb_read(start, size)
+            data = self.client.read_m(start, size)
+            if data is None:
+                raise Exception('读取数据为空')
             return bytes(data)
         except Exception as e:
             print(f'读取M区失败: {e}')
@@ -65,9 +90,10 @@ class PLCClient:
     def read_i(self, start, size):
         if not self.connected:
             raise Exception('PLC未连接')
-
         try:
-            data = self.client.eb_read(start, size)
+            data = self.client.read_i(start, size)
+            if data is None:
+                raise Exception('读取数据为空')
             return bytes(data)
         except Exception as e:
             print(f'读取输入失败: {e}')
@@ -76,9 +102,10 @@ class PLCClient:
     def read_q(self, start, size):
         if not self.connected:
             raise Exception('PLC未连接')
-
         try:
-            data = self.client.ab_read(start, size)
+            data = self.client.read_q(start, size)
+            if data is None:
+                raise Exception('读取数据为空')
             return bytes(data)
         except Exception as e:
             print(f'读取输出失败: {e}')
@@ -86,7 +113,7 @@ class PLCClient:
 
     def get_db_info(self, db_number):
         try:
-            return self.client.get_db_info(db_number)
+            return self.client.client.get_db_info(db_number)
         except Exception as e:
             print(f'获取DB信息失败: {e}')
             return None
@@ -103,7 +130,7 @@ class PLCClient:
         try:
             data = self.read_db(db_number, start, 1)
             set_bool(data, start, bit_offset, value)
-            self.client.db_write(db_number, start, data)
+            self.client.client.db_write(db_number, start, data)
             return True
         except Exception as e:
             print(f'写入Bool失败: {e}')
@@ -121,7 +148,7 @@ class PLCClient:
         try:
             data = bytearray(2)
             set_int(data, 0, value)
-            self.client.db_write(db_number, start, data)
+            self.client.client.db_write(db_number, start, data)
             return True
         except Exception as e:
             print(f'写入Int失败: {e}')
@@ -139,7 +166,7 @@ class PLCClient:
         try:
             data = bytearray(4)
             set_dint(data, 0, value)
-            self.client.db_write(db_number, start, data)
+            self.client.client.db_write(db_number, start, data)
             return True
         except Exception as e:
             print(f'写入DInt失败: {e}')
@@ -157,8 +184,15 @@ class PLCClient:
         try:
             data = bytearray(4)
             set_real(data, 0, value)
-            self.client.db_write(db_number, start, data)
+            self.client.client.db_write(db_number, start, data)
             return True
         except Exception as e:
             print(f'写入Real失败: {e}')
             return False
+
+
+PLCClient = LegacyPLCClient
+"""
+保持向后兼容性的别名
+旧代码中使用 PLCClient 类名的地方仍然可以正常工作
+"""
