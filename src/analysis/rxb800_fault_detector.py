@@ -34,10 +34,10 @@ class RXB800FaultDetector(BaseFaultDetector):
             name='上油箱油温过低',
             bit_position=0,
             severity=self.SEVERITY_WARNING,
-            description='上油箱油温低于正常范围',
+            description='上油箱油温低需开启加热',
             related_variables=['上油箱油温'],
             condition_type='analog',
-            normal_range=(10.0, 60.0),
+            threshold_var='上油需加热温度',
             unit='°C'
         ))
         
@@ -45,10 +45,10 @@ class RXB800FaultDetector(BaseFaultDetector):
             name='上油箱油需冷却',
             bit_position=1,
             severity=self.SEVERITY_WARNING,
-            description='上油箱油温需要冷却',
+            description='上油箱油温需要冷却，冷却循环泵开启',
             related_variables=['上油箱油温'],
             condition_type='analog',
-            threshold=50.0,
+            threshold_var='油需冷却温度',
             unit='°C'
         ))
         
@@ -56,10 +56,10 @@ class RXB800FaultDetector(BaseFaultDetector):
             name='上油箱油温过高',
             bit_position=2,
             severity=self.SEVERITY_CRITICAL,
-            description='上油箱油温过高，可能导致设备损坏',
+            description='上油箱油温过高，主电机停止运行',
             related_variables=['上油箱油温'],
             condition_type='analog',
-            normal_range=(10.0, 60.0),
+            threshold_var='油超温温度',
             unit='°C'
         ))
         

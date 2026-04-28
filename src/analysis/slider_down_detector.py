@@ -16,6 +16,13 @@ class ConditionStatus(Enum):
     UNKNOWN = "未知"
 
 
+class ConditionType(Enum):
+    """条件类型"""
+    PRECONDITION = "前置条件"      # 下行前必须满足的条件
+    EXECUTION_SIGNAL = "执行信号"  # 下行执行时的信号状态
+    AUXILIARY = "辅助诊断"         # 辅助诊断条件
+
+
 @dataclass
 class SliderDownCondition:
     """滑块下行前置条件"""
@@ -23,6 +30,7 @@ class SliderDownCondition:
     description: str
     variable_name: str
     expected_value: Any
+    condition_type: ConditionType = ConditionType.PRECONDITION
     current_value: Any = None
     status: ConditionStatus = ConditionStatus.UNKNOWN
 
@@ -52,75 +60,122 @@ class SliderDownAbnormalDetector:
         根据梯形图分析整理得到
         """
         return [
+            # ===== 前置条件（下行前必须满足）=====
             # 急停条件
             SliderDownCondition(
                 name="急停合格",
                 description="急停按钮未按下",
                 variable_name="急停合格",
-                expected_value=0
+                expected_value=0,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 滑块位置条件
             SliderDownCondition(
                 name="滑块在上限",
                 description="滑块处于上限位置",
                 variable_name="滑块上限",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 双手操作条件
             SliderDownCondition(
                 name="双手合格",
                 description="双手操作按钮合格",
                 variable_name="双手合格",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 电机启动条件
             SliderDownCondition(
                 name="电机启动主控",
                 description="电机主控已启动",
                 variable_name="电机启动主控",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 允许下行条件
             SliderDownCondition(
                 name="允许下行",
                 description="系统允许滑块下行",
                 variable_name="允许下行",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 移动台条件
             SliderDownCondition(
                 name="移动台合格",
                 description="移动台位置合格",
                 variable_name="移动台合格",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 驱动器状态
             SliderDownCondition(
                 name="驱动器正常",
                 description="驱动器无故障",
                 variable_name="驱动器正常",
-                expected_value=0
+                expected_value=0,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 系统错误
             SliderDownCondition(
                 name="系统无错误",
                 description="系统无错误信号",
                 variable_name="系统Error",
-                expected_value=0
+                expected_value=0,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 安全爪条件
             SliderDownCondition(
                 name="安全爪打开",
                 description="安全爪已打开到位",
                 variable_name="安全爪打开到位",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
             ),
             # 安全爪主控
             SliderDownCondition(
                 name="安全爪主控",
                 description="安全爪主控激活",
                 variable_name="安全爪主控",
-                expected_value=1
+                expected_value=1,
+                condition_type=ConditionType.PRECONDITION
+            ),
+            
+            # ===== 执行信号（下行执行时的状态）=====
+            # 滑块慢下信号
+            SliderDownCondition(
+                name="滑块慢下",
+                description="滑块慢下执行信号",
+                variable_name="滑块慢下",
+                expected_value=1,
+                condition_type=ConditionType.EXECUTION_SIGNAL
+            ),
+            # 3Y1液压阀
+            SliderDownCondition(
+                name="3Y1液压阀",
+                description="3Y1液压阀控制信号",
+                variable_name="3Y1",
+                expected_value=1,
+                condition_type=ConditionType.EXECUTION_SIGNAL
+            ),
+            # 打开充液阀
+            SliderDownCondition(
+                name="打开充液阀",
+                description="充液阀打开信号",
+                variable_name="打开充液阀",
+                expected_value=1,
+                condition_type=ConditionType.EXECUTION_SIGNAL
+            ),
+            
+            # ===== 辅助诊断条件 =====
+            # 滑块快转慢位
+            SliderDownCondition(
+                name="滑块快转慢位",
+                description="滑块速度切换点",
+                variable_name="滑块快转慢位",
+                expected_value=0,
+                condition_type=ConditionType.AUXILIARY
             ),
         ]
 
@@ -229,12 +284,14 @@ class SliderDownAbnormalDetector:
             'description': '',
             'unsatisfied_conditions': [],
             'all_conditions': [],
+            'execution_signals': [],      # 执行信号状态
+            'auxiliary_conditions': [],   # 辅助诊断条件
             'elapsed_time': 0,
             'delay_tolerance': self.delay_tolerance,
             'error_tolerance': self.error_tolerance
         }
 
-        # 检查所有条件的状态
+        # 分类检查所有条件的状态
         for condition in self.conditions:
             condition_info = {
                 'name': condition.name,
@@ -242,12 +299,22 @@ class SliderDownAbnormalDetector:
                 'variable': condition.variable_name,
                 'expected': condition.expected_value,
                 'current': condition.current_value,
-                'status': condition.status.value
+                'status': condition.status.value,
+                'type': condition.condition_type.value
             }
             result['all_conditions'].append(condition_info)
             
-            if condition.status == ConditionStatus.NOT_SATISFIED:
-                result['unsatisfied_conditions'].append(condition_info)
+            # 根据条件类型分类处理
+            if condition.condition_type == ConditionType.PRECONDITION:
+                # 前置条件：检查是否满足
+                if condition.status == ConditionStatus.NOT_SATISFIED:
+                    result['unsatisfied_conditions'].append(condition_info)
+            elif condition.condition_type == ConditionType.EXECUTION_SIGNAL:
+                # 执行信号：记录当前状态
+                result['execution_signals'].append(condition_info)
+            elif condition.condition_type == ConditionType.AUXILIARY:
+                # 辅助诊断条件：记录当前状态
+                result['auxiliary_conditions'].append(condition_info)
 
         # 获取当前滑块速度
         slider_speed = 0
@@ -268,7 +335,7 @@ class SliderDownAbnormalDetector:
             result['elapsed_time'] = elapsed_time
 
         # 异常检测逻辑：
-        # 有下行指令 AND 有条件不满足 AND (滑块速度为0 OR 滑块速度绝对值 < 0.1) 
+        # 有下行指令 AND 有前置条件不满足 AND (滑块速度为0 OR 滑块速度绝对值 < 0.1) 
         # AND 已经超过延迟容忍时间(1.5s) + 误差容忍时间(1s) = 2.5s
         total_tolerance = self.delay_tolerance + self.error_tolerance
         
@@ -336,6 +403,20 @@ class SliderDownAbnormalDetector:
                 report.append(f"   当前值: {cond['current']}")
                 report.append(f"   状态: {cond['status']}")
         
+        # 执行信号状态
+        if check_result.get('execution_signals'):
+            report.append(f"\n执行信号状态:")
+            for sig in check_result['execution_signals']:
+                status_mark = "[激活]" if sig['current'] == 1 else "[未激活]"
+                report.append(f"  {sig['name']}: {status_mark} (当前值={sig['current']})")
+        
+        # 辅助诊断条件
+        if check_result.get('auxiliary_conditions'):
+            report.append(f"\n辅助诊断信息:")
+            for aux in check_result['auxiliary_conditions']:
+                status_mark = "[正常]" if aux['current'] == aux['expected'] else "[异常]"
+                report.append(f"  {aux['name']}: {status_mark} (当前值={aux['current']})")
+        
         report.append(f"\n当前状态:")
         report.append(f"  下行指令: {'激活' if self.down_command_active else '未激活'}")
         report.append(f"  滑块移动: {'是' if self.slider_moving else '否'}")
@@ -352,6 +433,7 @@ class SliderDownAbnormalDetector:
         report.append("4. 确认电机是否已启动")
         report.append("5. 检查安全门和安全爪状态")
         report.append("6. 查看系统错误和驱动器状态")
+        report.append("7. 检查液压阀(3Y1)和充液阀状态")
         report.append("=" * 60)
         
         return "\n".join(report)
@@ -386,11 +468,17 @@ if __name__ == '__main__':
         '系统Error': 0,
         '安全爪打开到位': 1,
         '安全爪主控': 1,
-        '滑块慢下': 0
+        '滑块慢下': 0,
+        '3Y1': 0,
+        '打开充液阀': 0,
+        '滑块快转慢位': 0
     }
     detector.update_facts(normal_facts)
     result = detector.check_abnormal()
     print(f"异常: {result['abnormal']}")
+    print(f"前置条件数: {len([c for c in result['all_conditions'] if c['type'] == '前置条件'])}")
+    print(f"执行信号数: {len(result['execution_signals'])}")
+    print(f"辅助诊断数: {len(result['auxiliary_conditions'])}")
     print()
     
     # 测试2: 下行指令发出但滑块未动（急停按下）
@@ -398,10 +486,13 @@ if __name__ == '__main__':
     abnormal_facts1 = normal_facts.copy()
     abnormal_facts1['急停合格'] = 1  # 急停按下
     abnormal_facts1['滑块慢下'] = 1  # 下行指令发出
+    abnormal_facts1['3Y1'] = 1       # 液压阀激活
+    abnormal_facts1['打开充液阀'] = 1  # 充液阀打开
     abnormal_facts1['滑块上限'] = 1  # 滑块仍在上限
     detector.update_facts(abnormal_facts1)
     result = detector.check_abnormal()
     print(f"异常: {result['abnormal']}")
+    print(f"执行信号状态: {[(s['name'], s['current']) for s in result['execution_signals']]}")
     if result['abnormal']:
         print(f"\n推理报告:")
         print(detector.get_abnormal_reasoning())
@@ -414,6 +505,8 @@ if __name__ == '__main__':
     abnormal_facts2['双手合格'] = 0
     abnormal_facts2['滑块上限'] = 0
     abnormal_facts2['滑块慢下'] = 1
+    abnormal_facts2['3Y1'] = 1
+    abnormal_facts2['打开充液阀'] = 1
     detector.update_facts(abnormal_facts2)
     result = detector.check_abnormal()
     print(f"异常: {result['abnormal']}")

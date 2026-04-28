@@ -9,10 +9,20 @@ from .fault_detector_base import (
     FaultBit, 
     FaultDetectionResult, 
     FaultDetectorRegistry,
-    create_detector
+    create_detector,
+    is_rx_series_device,
+    get_slider_down_detector,
+    RXSeriesFaultAnalyzer
 )
 from .rxb800_fault_detector import RXB800FaultDetector
 from .rxb800_rules import RXB800FaultRules
+from .rxa1300_fault_detector import RXA1300FaultDetector, create_rxa1300_detector
+from .configurable_fault_detector import (
+    ConfigurableFaultDetector,
+    RXFaultDetector,
+    create_rx_detector,
+    create_detector_from_config
+)
 
 __all__ = [
     'DataAnalyzer',
@@ -30,6 +40,18 @@ __all__ = [
     'FaultDetectionResult',
     'FaultDetectorRegistry',
     'create_detector',
+    # 专用设备检测器
     'RXB800FaultDetector',
+    'RXA1300FaultDetector',
+    'create_rxa1300_detector',
     'RXB800FaultRules',
+    # 可配置故障检测器
+    'ConfigurableFaultDetector',
+    'RXFaultDetector',
+    'create_rx_detector',
+    'create_detector_from_config',
+    # RX系列设备故障分析
+    'is_rx_series_device',
+    'get_slider_down_detector',
+    'RXSeriesFaultAnalyzer',
 ]

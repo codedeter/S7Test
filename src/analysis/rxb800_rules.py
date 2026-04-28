@@ -12,7 +12,11 @@ class RXB800FaultRules:
     FAULT_VAR_MAP = {
         '上油箱油温': {
             'faults': ['上油箱油温过低', '上油箱油温过高', '上油箱油需冷却'],
-            'normal_range': (10.0, 60.0),
+            'threshold_vars': {
+                'low': '上油需加热温度',
+                'cooling': '油需冷却温度',
+                'high': '油超温温度'
+            },
             'unit': '°C'
         },
         '冷却水温度': {
@@ -202,21 +206,24 @@ class RXB800FaultRules:
                 'type': 'analog',
                 'var_name': '上油箱油温',
                 'condition': 'below',
-                'threshold': 10.0,
+                'threshold_var': '上油需加热温度',
+                'action': '开启上油箱加热',
                 'severity': 'warning'
             },
             '上油箱油温过高': {
                 'type': 'analog',
                 'var_name': '上油箱油温',
                 'condition': 'above',
-                'threshold': 60.0,
+                'threshold_var': '油超温温度',
+                'action': '主电机停止运行',
                 'severity': 'critical'
             },
             '上油箱油需冷却': {
                 'type': 'analog',
                 'var_name': '上油箱油温',
                 'condition': 'needs_cooling',
-                'threshold': 50.0,
+                'threshold_var': '油需冷却温度',
+                'action': '开启冷却循环泵',
                 'severity': 'warning'
             },
             '润滑液位低故障': {

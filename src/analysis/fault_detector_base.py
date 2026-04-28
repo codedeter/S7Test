@@ -20,6 +20,7 @@ class FaultBit:
     condition_type: str = 'status'  # status, analog, network
     threshold: Optional[float] = None
     normal_range: Optional[tuple] = None
+    threshold_var: Optional[str] = None  # 动态阈值变量名（从PLC读取）
     unit: str = '状态'
 
 
@@ -104,12 +105,13 @@ class BaseFaultDetector(ABC):
         """
         return len(self._fault_bits)
     
-    def detect_faults(self, device_data: Dict[str, Any]) -> List[FaultDetectionResult]:
+    def detect_faults(self, device_data: Dict[str, Any], var_values: Dict[str, Any] = None) -> List[FaultDetectionResult]:
         """
         检测所有故障位
         
         Args:
             device_data: 设备数据字典，包含故障位值和相关变量
+            var_values: 其他变量值（用于条件过滤）
         
         Returns:
             故障检测结果列表
@@ -120,6 +122,10 @@ class BaseFaultDetector(ABC):
             detected = self._check_fault_bit(fault_name, device_data)
             
             if detected:
+                # 应用安全条件过滤（如光栅故障在安全条件不满足时忽略）
+                if self._should_filter_fault(fault_name, var_values):
+                    continue
+                    
                 result = FaultDetectionResult(
                     fault_name=fault_name,
                     detected=True,
@@ -198,6 +204,21 @@ class BaseFaultDetector(ABC):
         related_var = fault_bit.related_variables[0] if fault_bit.related_variables else None
         if related_var and related_var in device_data:
             value = device_data[related_var]
+            
+            # 优先使用动态阈值变量
+            if fault_bit.threshold_var:
+                # 从device_data中读取动态阈值
+                dynamic_threshold = device_data.get(fault_bit.threshold_var)
+                if dynamic_threshold is not None:
+                    # 根据故障名称判断检查方向
+                    if '过低' in fault_name or '低于' in fault_name:
+                        return value < dynamic_threshold
+                    elif '过高' in fault_name or '高于' in fault_name or '需冷却' in fault_name:
+                        return value > dynamic_threshold
+                    else:
+                        return value > dynamic_threshold
+            
+            # 使用固定阈值范围
             if fault_bit.normal_range:
                 min_val, max_val = fault_bit.normal_range
                 
@@ -211,6 +232,13 @@ class BaseFaultDetector(ABC):
                 else:
                     # 默认检查两边
                     return value < min_val or value > max_val
+            
+            # 使用固定阈值
+            if fault_bit.threshold is not None:
+                if '过低' in fault_name or '低于' in fault_name:
+                    return value < fault_bit.threshold
+                else:
+                    return value > fault_bit.threshold
         
         return False
     
@@ -421,20 +449,21 @@ class FaultDetectorRegistry:
         return device_type in cls._detectors
     
     @classmethod
-    def detect_faults(cls, device_type: str, device_data: Dict[str, Any]) -> List[FaultDetectionResult]:
+    def detect_faults(cls, device_type: str, device_data: Dict[str, Any], var_values: Dict[str, Any] = None) -> List[FaultDetectionResult]:
         """
         使用指定类型的检测器检测故障
         
         Args:
             device_type: 设备类型
             device_data: 设备数据
+            var_values: 其他变量值（用于条件过滤）
         
         Returns:
             故障检测结果列表
         """
         detector = cls.get_detector(device_type)
         if detector:
-            return detector.detect_faults(device_data)
+            return detector.detect_faults(device_data, var_values)
         return []
     
     @classmethod
@@ -460,22 +489,166 @@ class FaultDetectorRegistry:
 def create_detector(device_type: str) -> Optional[BaseFaultDetector]:
     """
     创建指定类型的故障检测器
+    优先尝试多种方式创建检测器：
+    1. 查找专用的设备特定检测器类
+    2. 使用可配置架构
+    3. 查找配置化故障
     
     Args:
         device_type: 设备类型
-    
+        
     Returns:
         故障检测器实例，如果不支持该类型返回None
     """
-    # 动态导入设备特定的检测器
     try:
+        # RXB800 专用检测器
         if device_type == 'RXB800':
             from src.analysis.rxb800_fault_detector import RXB800FaultDetector
             detector = RXB800FaultDetector()
             FaultDetectorRegistry.register_detector(detector)
             return detector
-        # 可以在这里添加更多设备类型
+        
+        # RXA1300 专用检测器
+        if device_type == 'RXA1300':
+            from src.analysis.rxa1300_fault_detector import RXA1300FaultDetector
+            detector = RXA1300FaultDetector()
+            FaultDetectorRegistry.register_detector(detector)
+            return detector
+        
+        # RX 系列其他设备 - 使用可配置架构
+        if is_rx_series_device(device_type):
+            from src.analysis.configurable_fault_detector import create_rx_detector
+            detector = create_rx_detector(device_type)
+            FaultDetectorRegistry.register_detector(detector)
+            return detector
+        
+        # 可以在这里添加更多设备类型或配置方式
+        
     except ImportError:
         pass
     
     return None
+
+
+def is_rx_series_device(device_type: str) -> bool:
+    """
+    判断设备是否为RX系列设备
+    
+    Args:
+        device_type: 设备类型
+    
+    Returns:
+        True表示是RX系列设备
+    """
+    return device_type.upper().startswith('RX')
+
+
+def get_slider_down_detector():
+    """
+    获取滑块下行异常检测器实例
+    
+    Returns:
+        SliderDownAbnormalDetector实例
+    """
+    try:
+        from src.analysis.slider_down_detector import create_slider_detector
+        return create_slider_detector()
+    except ImportError:
+        return None
+
+
+class RXSeriesFaultAnalyzer:
+    """
+    RX系列设备故障分析器
+    为所有RX系列设备提供统一的滑块下行异常检测能力
+    """
+    
+    _slider_detector = None
+    
+    @classmethod
+    def get_slider_detector(cls):
+        """获取或创建滑块下行检测器实例"""
+        if cls._slider_detector is None:
+            cls._slider_detector = get_slider_down_detector()
+        return cls._slider_detector
+    
+    @classmethod
+    def analyze_slider_down(cls, facts: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        分析滑块下行异常
+        
+        Args:
+            facts: PLC数据字典
+        
+        Returns:
+            分析结果字典
+        """
+        detector = cls.get_slider_detector()
+        if detector is None:
+            return {'available': False, 'reason': '滑块下行检测器未加载'}
+        
+        detector.update_facts(facts)
+        return detector.check_abnormal()
+    
+    @classmethod
+    def get_slider_down_reasoning(cls, facts: Dict[str, Any]) -> str:
+        """
+        获取滑块下行异常推理报告
+        
+        Args:
+            facts: PLC数据字典
+        
+        Returns:
+            推理报告字符串
+        """
+        detector = cls.get_slider_detector()
+        if detector is None:
+            return "滑块下行检测器未加载"
+        
+        detector.update_facts(facts)
+        return detector.get_abnormal_reasoning()
+    
+    @classmethod
+    def check_rx_device_faults(cls, device_type: str, device_data: Dict[str, Any], 
+                                var_values: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        检查RX系列设备的故障（包括滑块下行异常）
+        
+        Args:
+            device_type: 设备类型
+            device_data: 设备故障位数据
+            var_values: 其他变量值
+        
+        Returns:
+            综合故障分析结果
+        """
+        result = {
+            'device_type': device_type,
+            'is_rx_series': is_rx_series_device(device_type),
+            'fault_summary': None,
+            'slider_down_analysis': None
+        }
+        
+        # 获取基础故障摘要
+        detector = FaultDetectorRegistry.get_detector(device_type)
+        if detector:
+            result['fault_summary'] = detector.get_fault_summary(device_data, var_values)
+        else:
+            result['fault_summary'] = {'total_faults': 0, 'active_faults': [], 'has_critical': False}
+        
+        # RX系列设备额外检查滑块下行异常
+        if result['is_rx_series'] and var_values:
+            slider_result = cls.analyze_slider_down(var_values)
+            result['slider_down_analysis'] = slider_result
+            
+            # 如果检测到滑块下行异常，添加到活动故障中
+            if slider_result.get('abnormal'):
+                if 'rx_series_faults' not in result:
+                    result['rx_series_faults'] = []
+                result['rx_series_faults'].append({
+                    'type': 'slider_down_abnormal',
+                    'description': slider_result.get('description', ''),
+                    'unsatisfied_conditions': slider_result.get('unsatisfied_conditions', [])
+                })
+        
+        return result

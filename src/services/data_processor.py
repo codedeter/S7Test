@@ -178,30 +178,47 @@ class DataProcessor:
         
         with self.buffer_lock:
             if self.data_buffer:
-                for buffer_item in list(self.data_buffer):
+                # 从缓冲区中获取最新的数据，按设备分组
+                device_latest_data = {}
+                
+                # 倒序遍历，确保只保留每个设备的最新数据
+                for buffer_item in reversed(list(self.data_buffer)):
                     device_id = buffer_item.get('device_id', 'unknown')
-                    if device_id not in device_data_map:
-                        device_data_map[device_id] = {
-                            'device_id': device_id,
-                            'device_name': buffer_item.get('device_name', device_id),
-                            'current_values': {},
-                            'history_data': []
-                        }
+                    if device_id not in device_latest_data:
+                        device_latest_data[device_id] = buffer_item
+                
+                # 构建发送数据包
+                for device_id, buffer_item in device_latest_data.items():
+                    device_data_map[device_id] = {
+                        'device_id': device_id,
+                        'device_name': buffer_item.get('device_name', device_id),
+                        'current_values': {},
+                        'history_data': []
+                    }
 
                     latest_data = buffer_item['data']
+                    
+                    # 打印几个关键变量的值，确认数据在变化
+                    print(f"[DataProcessor] {device_id} data sample:")
+                    count = 0
+                    for item in latest_data:
+                        tag_name = item.get('tag_name')
+                        if tag_name and count < 5:
+                            print(f"  {tag_name}: {item['value']} (DB{item['db_number']}.{item['address']})")
+                            count += 1
+                    
                     for item in latest_data:
                         tag_name = item.get('tag_name')
                         if tag_name:
                             key = f"{device_id}:{tag_name}"
                             device_data_map[device_id]['current_values'][key] = item
 
+                    # 添加一条历史数据
                     device_data_map[device_id]['history_data'].append({
                         'timestamp': buffer_item['timestamp'],
                         'data': latest_data
                     })
-
-                self.data_buffer.clear()
-
+        
         return device_data_map
 
     def get_pending_anomalies(self):

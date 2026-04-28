@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
@@ -56,6 +57,8 @@ class DeviceConfig:
     slot: int = 1
     connection_timeout: int = 5000
     retry_interval: int = 3000
+    max_retry_attempts: int = 0
+    reconnect_backoff_enabled: bool = True
     data_blocks: List[DataBlock] = field(default_factory=list)
     m_variables: List[AreaVariable] = field(default_factory=list)
     i_variables: List[AreaVariable] = field(default_factory=list)
@@ -76,6 +79,46 @@ class DeviceStatus:
     last_error: Optional[str] = None
     last_update: Optional[float] = None
     data_count: int = 0
+    
+    disconnection_start_time: Optional[float] = None
+    total_disconnection_duration: float = 0
+    consecutive_failure_count: int = 0
+    last_reconnection_time: Optional[float] = None
+    last_disconnection_duration: float = 0
+    reconnection_count: int = 0
+    
+    def start_disconnection(self):
+        if not self.disconnection_start_time:
+            self.disconnection_start_time = time.time()
+            self.status = ConnectionStatus.DISCONNECTED
+            self.connected = False
+    
+    def end_disconnection(self):
+        if self.disconnection_start_time:
+            duration = time.time() - self.disconnection_start_time
+            self.last_disconnection_duration = duration
+            self.total_disconnection_duration += duration
+            self.disconnection_start_time = None
+            self.consecutive_failure_count = 0
+            self.last_reconnection_time = time.time()
+            self.reconnection_count += 1
+            self.status = ConnectionStatus.CONNECTED
+            self.connected = True
+    
+    def get_current_disconnection_duration(self) -> float:
+        if self.disconnection_start_time:
+            return time.time() - self.disconnection_start_time
+        return 0
+
+
+@dataclass
+class DisconnectionRecord:
+    device_id: str
+    start_time: float
+    end_time: Optional[float] = None
+    duration: float = 0
+    reason: str = ""
+    reconnected: bool = False
 
 
 def create_device_config(

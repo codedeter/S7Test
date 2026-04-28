@@ -41,41 +41,61 @@ class DroolsLite:
     def _init_plc_rules(self):
         """初始化PLC故障诊断规则"""
         
-        # 规则1: 油温过高
+        # 规则1: 油温过低警告
+        self.add_rule(
+            rule_id="TEMPERATURE_LOW_001",
+            name="油温过低警告",
+            description="实际油温低于上油需加热温度，开启上油箱加热",
+            condition=lambda facts: facts.get('上油箱油温', 0) < facts.get('上油需加热温度', 0),
+            action=lambda facts: {
+                'rule_id': 'TEMPERATURE_LOW_001',
+                'name': '油温过低警告',
+                'severity': 'low',
+                'description': f'油温过低需加热: {facts.get("上油箱油温", 0):.1f}°C < {facts.get("上油需加热温度", 0):.1f}°C',
+                'value': facts.get('上油箱油温', 0),
+                'threshold': facts.get('上油需加热温度', 0),
+                'action': '开启上油箱加热'
+            },
+            severity=RulePriority.LOW
+        )
+        
+        # 规则2: 油需冷却警告
+        self.add_rule(
+            rule_id="TEMPERATURE_COOLING_001",
+            name="油需冷却警告",
+            description="实际油温超过油需冷却温度，开启冷却循环泵",
+            condition=lambda facts: facts.get('上油箱油温', 0) > facts.get('油需冷却温度', 0),
+            action=lambda facts: {
+                'rule_id': 'TEMPERATURE_COOLING_001',
+                'name': '油需冷却警告',
+                'severity': 'low',
+                'description': f'油温需冷却: {facts.get("上油箱油温", 0):.1f}°C > {facts.get("油需冷却温度", 0):.1f}°C',
+                'value': facts.get('上油箱油温', 0),
+                'threshold': facts.get('油需冷却温度', 0),
+                'action': '开启冷却循环泵'
+            },
+            severity=RulePriority.LOW
+        )
+        
+        # 规则3: 油温过高警告
         self.add_rule(
             rule_id="TEMPERATURE_HIGH_001",
             name="油温过高警告",
-            description="油超温温度超过60度",
-            condition=lambda facts: facts.get('油超温温度', 0) > 60,
+            description="实际油温超过油超温温度，主电机停止运行",
+            condition=lambda facts: facts.get('上油箱油温', 0) > facts.get('油超温温度', 0),
             action=lambda facts: {
                 'rule_id': 'TEMPERATURE_HIGH_001',
                 'name': '油温过高警告',
-                'severity': 'medium',
-                'description': f'油超温温度过高: {facts.get("油超温温度", 0)}°C',
-                'value': facts.get('油超温温度', 0),
-                'threshold': 60
-            },
-            severity=RulePriority.MEDIUM
-        )
-        
-        # 规则2: 油温严重过高
-        self.add_rule(
-            rule_id="TEMPERATURE_CRITICAL_001",
-            name="油温严重过高",
-            description="上油加热关闭温度超过80度",
-            condition=lambda facts: facts.get('上油加热关闭温度', 0) > 80,
-            action=lambda facts: {
-                'rule_id': 'TEMPERATURE_CRITICAL_001',
-                'name': '油温严重过高',
                 'severity': 'high',
-                'description': f'油温严重过高: {facts.get("上油加热关闭温度", 0)}°C',
-                'value': facts.get('上油加热关闭温度', 0),
-                'threshold': 80
+                'description': f'油温过高停机: {facts.get("上油箱油温", 0):.1f}°C > {facts.get("油超温温度", 0):.1f}°C',
+                'value': facts.get('上油箱油温', 0),
+                'threshold': facts.get('油超温温度', 0),
+                'action': '主电机停止运行'
             },
             severity=RulePriority.HIGH
         )
         
-        # 规则3: 急停触发
+        # 规则4: 急停触发
         self.add_rule(
             rule_id="EMERGENCY_STOP_001",
             name="急停触发",
