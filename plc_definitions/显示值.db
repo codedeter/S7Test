@@ -1,0 +1,48 @@
+﻿DATA_BLOCK "显示值"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      模拟量采集 : Struct
+         "2M1实时电机速度" : Real;
+         "2M2实时电机速度" : Real;
+         "2M3实时电机速度" : Real;
+         "2M4实时电机速度" : Real;
+         液压垫位移传感器 : Real;
+         压力传感器3S201 : Real;
+         压力传感器3S202 : Real;
+         油温传感器 : Real;
+         压力传感器3S203 : Real;
+         水温传感器 : Real;
+         流量传感器 : Real;
+         垫压力传感器4B201 : Real;
+         垫压力传感器4B202 : Real;
+         移动台提升压力Mpa : Real;
+         移动台压力传感器 : Real;
+         "4B201压力显示T" : Real;
+         "4B202压力显示T" : Real;
+      END_STRUCT;
+      HMI显示 : Struct
+         滑块实际位移 : Real;
+         滑块中间缸压力T : Real;
+         滑块侧缸压力T : Real;
+         滑块总压力T : Real;
+         滑块速度 : Real;
+         垫压力 : Real;
+         保压时间 : Int;
+         左台变频器转速 : Real;
+         右台变频器转速 : Real;
+         顶出时间 : Int;
+         "3Y10压力反馈" : Real;
+      END_STRUCT;
+      气阀顶出时间 : Struct
+         左气阀顶出时间 : Int;
+         右气阀顶出时间 : Int;
+      END_STRUCT;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+

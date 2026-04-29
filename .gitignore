@@ -39,6 +39,7 @@ ENV/
 *.sqlite3
 GLABAL.db
 database.db
+!plc_definitions/*.db
 
 # Logs
 logs/
@@ -46,6 +47,7 @@ logs/
 
 # Excel
 *.xlsx
+!plc_definitions/*.xlsx
 
 # Node.js
 node_modules/

@@ -1,0 +1,450 @@
+﻿DATA_BLOCK "GLABAL"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      保压选择 : Bool;
+      双手合格 : Bool;
+      电机启动主控 : Bool;
+      滑块上限 : Bool;
+      关断上循环泵 : Bool;
+      反行程检查 : Bool;
+      允许下行 : Bool;
+      回程停止位1 : Bool;
+      回程停止位2 : Bool;
+      回程停止位3 : Bool;
+      滑块快转慢位 : Bool;
+      滑块下限位 : Bool;
+      压制力达到 : Bool;
+      主缸泄压到位 : Bool;
+      滑块合模位 : Bool;
+      移动台落下到位指示 : Bool;
+      移动台提升到位指示 : Bool;
+      移动台移入到位指示 : Bool;
+      下行主控 : Bool;
+      滑块下行前条件检查 : Bool;
+      保压 : Bool;
+      泄压 : Bool;
+      静止按钮 : Bool;
+      回程按钮 : Bool;
+      滑块下行 : Bool;
+      单次连续压制力到达 : Bool;
+      回程主控 : Bool;
+      锁紧松开驱动滑块回程 : Bool;
+      滑块回程准备 : Bool;
+      滑块回程 : Bool;
+      润滑安全条件 : Bool;
+      开机润滑完成 : Bool;
+      开机润滑 : Bool;
+      润滑次数到 : Bool;
+      润滑泵开始运行 : Bool;
+      锁紧准备 : Bool;
+      松开准备 : Bool;
+      锁紧松开不在上极限时先驱 : Bool;
+      安全门按钮 : Struct
+         左安全门上升 : Bool;
+         左安全门下降 : Bool;
+         右安全门上升 : Bool;
+         右安全门下降 : Bool;
+      END_STRUCT;
+      左移动台故障 : Bool;
+      班产复位 : Bool;
+      气阀手动顶出 : Bool;
+      动态调压启用 : Bool;
+      二次泄压启用 : Bool;
+      锁紧到位 : Bool;
+      松开到位 : Bool;
+      压制力达到指示 : Bool;
+      回程启用气阀位 : Array[1..6] of Bool;
+      气阀手动退回 : Bool;
+      润滑上升沿 : Bool;
+      电磁铁主控 : Bool;
+      压机模式 : Int;
+      驱动器正常 : Bool;
+      系统Error : Bool;
+      润滑次数 : DInt;
+      润滑时间 : DInt;
+      油超温温度 : Real;
+      油需冷却温度 : Real;
+      润滑强制开启 : Bool;
+      上循环强制开启 : Bool;
+      下循环强制开启 : Bool;
+      弹出急停画面 : Bool;
+      HMI开关 : Struct
+         左前模具照明 : Bool;
+         左后模具照明 : Bool;
+         右前模具照明 : Bool;
+         右后模具照明 : Bool;
+         机床照明 : Bool;
+         上油加热手动 : Bool;
+         下油加热手动 : Bool;
+         工作台落下按钮 : Bool;
+         工作台提升按钮 : Bool;
+         移动台选择 : Bool;
+         移出按钮 : Bool;
+         移入按钮 : Bool;
+         选择左安全门 : Bool;
+         选择右安全门 : Bool;
+         拉伸垫模式 : Bool;
+         顶出器模式 : Bool;
+      END_STRUCT;
+      上油加热关闭温度 : Real;
+      上油需加热温度 : Real;
+      关闭上油加热 : Bool;
+      移动台夹紧力上限 : Bool;
+      移动台夹紧力下限 : Bool;
+      延时移出移动台 : Bool;
+      延时移入移动台 : Bool;
+      打开充液阀 : Bool;
+      下模夹紧压力达到 : Bool;
+      上模夹紧压力达到 : Bool;
+      合模位 : Bool;
+      滑块慢下 : Bool;
+      二次泄压位 : Bool;
+      "70%切泵" : Bool;
+      "%90切泵" : Bool;
+      "%90关断泵口" : Bool;
+      "3Y1" : Bool;
+      "3Y6.2开启" : Bool;
+      动态切缸 : Bool;
+      油阀手动顶出 : Bool;
+      油阀手动退回 : Bool;
+      夹紧器 : Struct
+         前进到位 : Bool;
+         退回到位 : Bool;
+         进先松 : Bool;
+         退先松 : Bool;
+         上模夹紧 : Bool;
+         上模松开 : Bool;
+         夹紧器前进 : Bool;
+         夹紧器后退 : Bool;
+         松模输出 : Struct
+            "1" : Bool;
+            "2" : Bool;
+            "3" : Bool;
+            "4" : Bool;
+            "5" : Bool;
+            "6" : Bool;
+            "7" : Bool;
+            "8" : Bool;
+            "9" : Bool;
+            "10" : Bool;
+            "11" : Bool;
+            "12" : Bool;
+         END_STRUCT;
+         模具前进保持后退主控 : Bool;
+         夹模后退输出 : Struct
+            "1" : Bool;
+            "2" : Bool;
+            "3" : Bool;
+            "4" : Bool;
+            "5" : Bool;
+            "6" : Bool;
+            "7" : Bool;
+            "8" : Bool;
+            "9" : Bool;
+            "10" : Bool;
+            "11" : Bool;
+            "12" : Bool;
+         END_STRUCT;
+      END_STRUCT;
+      启动电机过渡2M1 : Bool;
+      启动电机过渡2M2 : Bool;
+      启动电机过渡2M3 : Bool;
+      启动电机过渡2M5 : Bool;
+      关断下循环泵 : Bool;
+      安全爪主控 : Bool;
+      安全爪打开到位 : Bool;
+      安全爪回程 : Bool;
+      安全爪关闭到位 : Bool;
+      HMI电机启动 : Struct
+         "2M1启动按钮" : Bool;
+         "2M2启动按钮" : Bool;
+         "2M3启动按钮" : Bool;
+         辅助电机启动按钮 : Bool;
+      END_STRUCT;
+      HMI移动台 : Struct
+         选择左前移动台 : Bool;
+         选择右前移动台 : Bool;
+         控制5Y1压力 : Bool;
+         夹紧置位 : Bool;
+         提升落下主控 : Bool;
+         机外提升到位 : Bool;
+         机外落下到位 : Bool;
+         移入移出主控 : Bool;
+         移出打开抱闸 : Bool;
+         单次移入动作 : Bool;
+         单次移出动作 : Bool;
+         移入打开抱闸 : Bool;
+      END_STRUCT;
+      右前移动台 : Struct
+         右前移动台探头触发 : Bool;
+         右前机内移出至拐点 : Bool;
+         右前拐点移入至机内 : Bool;
+         右前拐点移出至机外 : Bool;
+         右前机外移入至拐点 : Bool;
+      END_STRUCT;
+      右后移动台 : Struct
+         右后移动台探头触发 : Bool;
+         右后机内移出至拐点 : Bool;
+         右后拐点移入至机内 : Bool;
+         右后拐点移出至机外 : Bool;
+         右后机外移入至拐点 : Bool;
+      END_STRUCT;
+      移动台记忆 : Struct
+         右台移出到位记忆 : Bool;   // 右台移出到位
+         左台移出到位记忆 : Bool;   // 左台移出到位
+         减速信号 : Bool;
+      END_STRUCT;
+      移动台合格 : Bool;
+      启用主台 : Bool;
+      启用副台 : Bool;
+      远程调压启用 : Bool;
+      右前按钮站选择 : Bool;
+      左后按钮站选择 : Bool;
+      左前按钮站选择 : Bool;
+      右后按钮站选择 : Bool;
+      缓冲清零 : Struct
+         左 : Bool;
+         右 : Bool;
+      END_STRUCT;
+      缓冲 : Struct
+         左挡块上限 : Bool;
+         右挡块上限 : Bool;
+         左挡块上极限 : Bool;
+         右挡块上极限 : Bool;
+         左挡块上行慢速 : Bool;
+         右挡块上行慢速 : Bool;
+         左抱闸上升提前打开 : Bool;
+         左抱闸下降提前打开 : Bool;
+         右抱闸上升提前打开 : Bool;
+         右抱闸下降提前打开 : Bool;
+         左挡块下限 : Bool;
+         右挡块下限 : Bool;
+         左挡块下极限 : Bool;
+         右挡块下极限 : Bool;
+         左挡块下行慢速 : Bool;
+         右挡块下行慢速 : Bool;
+         缓冲主控 : Bool;
+         挡块压下 : Bool;
+         左缓冲位置合格 : Bool;
+         右缓冲位置合格 : Bool;
+         左右挡块偏差合格 : Bool;
+         缓冲位置合格 : Bool;
+      END_STRUCT;
+      挡块上升 : Bool;
+      挡块下降 : Bool;
+      选择左挡块 : Bool;
+      选择右挡块 : Bool;
+      安全栓退回到位 : Bool;
+      安全栓移入到位 : Bool;
+      提升落下主控 : Bool;
+      左移出准备 : Bool;
+      右移出准备 : Bool;
+      左移入准备 : Bool;
+      右移入准备 : Bool;
+      移入移出主控 : Bool;
+      左台移出慢速 : Bool;
+      右台移出慢速 : Bool;
+      左台移入慢速 : Bool;
+      右台移入慢速 : Bool;
+      左移动台慢速 : Bool;
+      右移动台慢速 : Bool;
+      夹模主控 : Bool;
+      夹紧器开始推进 : Bool;
+      废料斗打开 : Bool;
+      废料斗关闭 : Bool;
+      左槽选择 : Bool;
+      右槽选择 : Bool;
+      润滑泵液位正常 : Bool;
+      左台气阀测试顶出 : Bool;
+      右台气阀测试顶出 : Bool;
+      左台下模泄压 : Bool;
+      右台下模泄压 : Bool;
+      左台下模夹紧力到达 : Bool;
+      右台下模夹紧力到达 : Bool;
+      左台下模夹紧 : Bool;
+      右台下模夹紧 : Bool;
+      左模具有料检测 : Array[1..6] of Bool;
+      右模具有料检测 : Array[1..6] of Bool;
+      一键换模 : Struct
+         主控 : Bool;
+         初始位置判断 : Bool;
+         初始启动滑块锁紧 : Bool;
+         缓冲向下 : Bool;
+         缓冲向下完成后松锁紧缸 : Bool;
+         滑块下行至合模位 : Bool;
+         模具夹紧器松开 : Bool;
+         夹紧器松开完成后滑块锁紧 : Bool;
+         安全门上升 : Bool;
+         移动台提升 : Bool;
+         判断移动台移入移出 : Bool;
+         "启动左台移出 右台移入" : Bool;
+         "启动右台移出 左台移入" : Bool;
+         移动台落下夹紧 : Bool;
+         安全门落下 : Bool;
+         安全门落下完成后滑块松开 : Bool;
+         滑块松开完成后滑块下行 : Bool;
+         模具夹紧器夹紧 : Bool;
+         夹紧器夹紧完成后滑块锁紧 : Bool;
+         滑块锁紧完成后缓冲上行 : Bool;
+         完成 : Bool;
+         移动台未移出超时报警 : Bool;
+         左挡块下行慢速 : Bool;
+         右挡块下行慢速 : Bool;
+      END_STRUCT;
+      使用夹板 : Bool;
+      左模具有料 : Bool;
+      左模具无料 : Bool;
+      右模具有料 : Bool;
+      右模具无料 : Bool;
+      左模具板料检测信号不合格 : Bool;
+      右模具板料检测信号不合格 : Bool;
+      板料检测信号闪断记忆 : Array[1..12] of Bool;
+      左台车变频器复位 : Bool;
+      右台车变频器复位 : Bool;
+      左光栅复位 : Bool;
+      右光栅复位 : Bool;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK "故障报警"
+TITLE = 故障报警
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+   STRUCT 
+      上油箱油温过低 : Bool;
+      上油箱油需冷却 : Bool;
+      上油箱油温过高 : Bool;
+      上油箱滤油受阻 : Bool;
+      上油箱油空 : Bool;
+      上油箱需补油 : Bool;
+      润滑泵滤油器堵塞 : Bool;
+      辅助油路滤油堵塞 : Bool;
+      流量阀滤油堵塞 : Bool;
+      伺服阀滤油堵塞 : Bool;
+      "3Y4滤油受阻" : Bool;
+      润滑液位低故障 : Bool;
+      操作站急停不合格 : Bool;
+      左前立柱急停不合格 : Bool;
+      右后立柱急停不合格 : Bool;
+      左后立柱急停不合格 : Bool;
+      右前立柱急停不合格 : Bool;
+      前按钮站急停不合格 : Bool;
+      后按钮站急停不合格 : Bool;
+      左光幕不合格 : Bool;
+      右光幕不合格 : Bool;
+      位移偏差不合格 : Bool;
+      滑块处于上极限 : Bool;
+      滑块处于下极限 : Bool;
+      操作台静止按下 : Bool;
+      闸阀3S113关闭 : Bool;
+      闸阀3S114关闭 : Bool;
+      闸阀3S115关闭 : Bool;
+      "5Q1电源未接通" : Bool;
+      提升夹紧截止阀未打开到位 : Bool;
+      充液截止阀1位打开到位 : Bool;
+      充液截止阀2位打开到位 : Bool;
+      充液截止阀3位打开到位 : Bool;
+      上模夹紧泵站液位低 : Bool;
+      PLC网络故障 : Bool;
+      动力柜网络故障 : Bool;
+      操作站网络故障 : Bool;
+      底梁网络故障 : Bool;
+      上梁网络故障 : Bool;
+      下油箱网络故障 : Bool;
+      滑块网络故障 : Bool;
+      滑块左位移传感器网络故障 : Bool;
+      左G120网络故障 : Bool;
+      左变频器故障 : Bool;
+      右变频器故障 : Bool;
+      左缓冲变频器故障 : Bool;
+      右缓冲变频器故障 : Bool;
+      "2Q1电源未接通" : Bool;
+      "2Q2电源未接通" : Bool;
+      "4Q1电源未接通" : Bool;
+      "4Q2电源未接通" : Bool;
+      "2Q7电源未接通" : Bool;
+      "5Q2电源未接通" : Bool;
+      "5Q3电源未接通" : Bool;
+      "7Q1电源未接通" : Bool;
+      "1Q3电源未接通" : Bool;
+      "2Q5电源未接通" : Bool;
+      "14Q1电源未接通" : Bool;
+      "1Q10电源未接通" : Bool;
+      "1Q11电源未接通" : Bool;
+      "1Q12电源未接通" : Bool;
+      "8Q1电源未接通" : Bool;
+      "8Q2电源未接通" : Bool;
+      电能表网络故障 : Bool;
+      滑块位移传感器网络故障 : Bool;
+      左缓冲变频器网络故障 : Bool;
+      右缓冲变频器网络故障 : Bool;
+      移动台变频器网络故障 : Bool;
+      左移动台变频器网络故障 : Bool;
+      右移动台变频器传感器网络故障 : Bool;
+      左缓冲编码器网络故障 : Bool;
+      右缓冲编码器网络故障 : Bool;
+      "2KM1电源未接通" : Bool;
+      "2KM2电源未接通" : Bool;
+      "2M1伺服故障报警" : Bool;
+      "2M2伺服故障报警" : Bool;
+      清料提醒报警 : Bool;
+      滑块下滑报警 : Bool;
+      模具板料检测异常 : Bool;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK "显示值"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      模拟量采集 : Struct
+         滑块左位移 : Real;
+         滑块右位移 : Real;
+         "3Y10压力Mpa" : Real;
+         主缸压力Mpa : Real;
+         侧缸压力Mpa : Real;
+         上油箱油温 : Real;
+         移动台夹紧压力Mpa : Real;
+         "2M1实时电机速度" : Real;
+         "2M2实时电机速度" : Real;
+         冷却水温度 : Real;
+         水流量 : Real;
+      END_STRUCT;
+      HMI显示 : Struct
+         滑块实际位移 : Real;
+         滑块中间缸压力T : Real;
+         滑块侧缸压力T : Real;
+         滑块总压T : Real;
+         滑块速度 : Real;
+         保压时间 : Int;
+         左变频器转速显示 : Real;
+         右变频器转速显示 : Real;
+         左缓冲转速 : Real;
+         右缓冲转速 : Real;
+      END_STRUCT;
+      压力滤波显示 : Real;
+      左缓冲位置 : Real;
+      右缓冲位置 : Real;
+      缓冲时间 : DInt;
+      气阀顶出时间 : Struct
+         左气阀顶出时间 : Int;
+         右气阀顶出时间 : Int;
+      END_STRUCT;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+
