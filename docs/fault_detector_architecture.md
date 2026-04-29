@@ -25,6 +25,10 @@ RXB800FaultDetector / RXA1300FaultDetector (具体设备)
 
 示例展示如何创建新设备检测器
 
+### 3. `fault_tracker.py` - 故障跟踪器
+
+管理故障状态、历史记录和解决状态
+
 ## 使用方式
 
 ### 方式1: 创建新的专用设备检测器（类继承）
@@ -81,6 +85,29 @@ config = {
 detector = create_detector_from_config('MY-RX', config)
 ```
 
+### 方式4: 使用故障跟踪器
+
+```python
+from src.analysis.fault_tracker import FaultTracker
+from src.data.data_storage import DataStorage
+
+data_storage = DataStorage()
+fault_tracker = FaultTracker(data_storage)
+
+# 记录故障
+fault_tracker.record_fault(
+    fault_name='油温过高',
+    device_id='plc_001',
+    severity='warning'
+)
+
+# 获取活跃故障
+active_faults = fault_tracker.get_active_faults('plc_001')
+
+# 解决故障
+fault_tracker.resolve_fault('油温过高', 'plc_001')
+```
+
 ## 故障配置字段
 
 | 字段 | 类型 | 必需 | 说明 |
@@ -128,3 +155,7 @@ detector = create_detector_from_config('MY-RX', config)
 | `rxa1300_fault_detector.py` | RXA1300 示例 |
 | `rxb800_fault_detector.py` | RXB800 原始实现（保留） |
 | `fault_detector_base.py` | 基类和注册中心（已更新） |
+| `fault_tracker.py` | 故障跟踪和状态管理 |
+| `drools_lite_engine.py` | 轻量级规则引擎 |
+| `data_analyzer.py` | 数据分析器 |
+| `slider_down_detector.py` | 滑块检测模块 |

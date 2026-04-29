@@ -8,6 +8,10 @@ from .device_manager import (
     DeviceManager, DeviceCollector, PLCClient,
     CollectedData, create_device_manager
 )
+from .connection_manager import (
+    ConnectionPool, ConnectionState, ConnectionConfig,
+    ConnectionStats, create_connection_pool
+)
 
 __all__ = [
     'DeviceType',
@@ -23,4 +27,9 @@ __all__ = [
     'PLCClient',
     'CollectedData',
     'create_device_manager',
+    'ConnectionPool',
+    'ConnectionState',
+    'ConnectionConfig',
+    'ConnectionStats',
+    'create_connection_pool',
 ]

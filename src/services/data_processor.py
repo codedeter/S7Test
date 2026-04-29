@@ -11,6 +11,8 @@ from src.analysis.slider_down_detector import create_slider_detector
 from src.analysis.rxb800_rules import RXB800FaultRules
 from src.analysis.fault_tracker import FaultTracker, AnomalyTracker
 from src.analysis.fault_detector_base import FaultDetectorRegistry, create_detector
+from src.analysis.fault_reasoner import create_fault_reasoner, FaultReasoningEngine
+from src.analysis.io_fault_integrator import create_io_fault_integrator, IOFaultIntegrator
 from src.devices.device_manager import CollectedData
 
 
@@ -21,6 +23,7 @@ class ProcessingResult:
     drools_results: List[Dict[str, Any]]
     slider_results: List[Dict[str, Any]]
     fault_status: Dict[str, Any]
+    fault_inferences: List[Dict[str, Any]]
 
 
 class DataProcessor:
@@ -31,6 +34,8 @@ class DataProcessor:
         self.fault_tracker = FaultTracker(self.data_storage)
         self.anomaly_tracker = AnomalyTracker()
         self.slider_detector = create_slider_detector()
+        self.fault_reasoner = create_fault_reasoner()
+        self.io_fault_integrator = create_io_fault_integrator()
         
         self._init_fault_detectors()
         
@@ -40,11 +45,19 @@ class DataProcessor:
         self.latest_drools_results = []
         self.latest_slider_results = []
         self.latest_fault_status = {}
+        self.latest_fault_inferences = []
+        self.latest_io_inferences = []
         
         self.anomalies_lock = threading.Lock()
         self.drools_lock = threading.Lock()
         self.slider_lock = threading.Lock()
         self.fault_lock = threading.Lock()
+        self.inference_lock = threading.Lock()
+        self.io_inference_lock = threading.Lock()
+        
+        self._last_processed_timestamp = {}
+        self._device_data_cache = {}
+        self._cache_valid_duration = 0.5
     
     def _init_fault_detectors(self):
         """
@@ -53,6 +66,9 @@ class DataProcessor:
         """
         create_detector('RXB800')
         print("Fault detectors initialized")
+        
+        print("Fault reasoner initialized with default rules")
+        print("IO fault integrator initialized with default mappings")
     
     def detect_device_faults(self, device_id: str, device_type: str, 
                               device_data: Dict[str, Any], var_values: Dict[str, Any] = None) -> dict:
@@ -90,28 +106,37 @@ class DataProcessor:
         new_drools_results = []
         new_slider_results = []
         new_fault_status = {}
+        current_time = time.time()
 
         for device_data in all_device_data:
             device_id = device_data.device_id
             data = device_data.data
 
+            self._update_cache(device_id, data, current_time)
+
             self.data_storage.batch_insert_plc_data(data, device_id)
 
             with self.buffer_lock:
                 self.data_buffer.append({
-                    'timestamp': time.time() * 1000,
+                    'timestamp': current_time * 1000,
                     'device_id': device_id,
                     'device_name': device_data.device_name,
                     'data': data
                 })
 
             facts = {}
+            has_changed = False
 
             for item in data:
                 tag_name = item.get('tag_name')
                 if tag_name:
                     key = f"{device_id}:{tag_name}"
+                    old_value = self._get_cached_value(device_id, tag_name)
                     facts[key] = item['value']
+
+                    if old_value is None or old_value != item['value']:
+                        has_changed = True
+                        self._update_cached_value(device_id, tag_name, item['value'])
 
                     db_number = item['db_number']
                     address = item['address']
@@ -122,7 +147,7 @@ class DataProcessor:
                     if not analysis_result['normal']:
                         predicted_value = self.data_analyzer.predict_value(db_number, address)
                         anomaly = {
-                            'timestamp': time.time(),
+                            'timestamp': current_time,
                             'device_id': device_id,
                             'db_number': db_number,
                             'address': address,
@@ -141,27 +166,28 @@ class DataProcessor:
                     if len(self.latest_anomalies) > 20:
                         self.latest_anomalies = self.latest_anomalies[-20:]
 
-            self.drools_engine.clear_facts()
-            self.drools_engine.insert_facts(facts)
-            drools_results = self.drools_engine.fire_all_rules()
-            if drools_results:
-                with self.drools_lock:
-                    for result in drools_results:
-                        result['timestamp'] = time.time()
-                        result['device_id'] = device_id
-                        self.latest_drools_results.append(result)
-                    if len(self.latest_drools_results) > 20:
-                        self.latest_drools_results = self.latest_drools_results[-20:]
+            if has_changed:
+                self.drools_engine.clear_facts()
+                self.drools_engine.insert_facts(facts)
+                drools_results = self.drools_engine.fire_all_rules()
+                if drools_results:
+                    with self.drools_lock:
+                        for result in drools_results:
+                            result['timestamp'] = current_time
+                            result['device_id'] = device_id
+                            self.latest_drools_results.append(result)
+                        if len(self.latest_drools_results) > 20:
+                            self.latest_drools_results = self.latest_drools_results[-20:]
 
-            self.slider_detector.update_facts(facts)
-            slider_result = self.slider_detector.check_abnormal()
-            if slider_result['abnormal']:
-                with self.slider_lock:
-                    slider_result['timestamp'] = time.time()
-                    slider_result['device_id'] = device_id
-                    self.latest_slider_results.append(slider_result)
-                    if len(self.latest_slider_results) > 10:
-                        self.latest_slider_results = self.latest_slider_results[-10:]
+                self.slider_detector.update_facts(facts)
+                slider_result = self.slider_detector.check_abnormal()
+                if slider_result['abnormal']:
+                    with self.slider_lock:
+                        slider_result['timestamp'] = current_time
+                        slider_result['device_id'] = device_id
+                        self.latest_slider_results.append(slider_result)
+                        if len(self.latest_slider_results) > 10:
+                            self.latest_slider_results = self.latest_slider_results[-10:]
 
             self._process_device_faults(device_id, data)
 
@@ -172,6 +198,29 @@ class DataProcessor:
             slider_results=new_slider_results,
             fault_status=new_fault_status
         )
+    
+    def _update_cache(self, device_id: str, data: List[Dict[str, Any]], timestamp: float):
+        self._last_processed_timestamp[device_id] = timestamp
+        if device_id not in self._device_data_cache:
+            self._device_data_cache[device_id] = {}
+        for item in data:
+            tag_name = item.get('tag_name')
+            if tag_name:
+                self._device_data_cache[device_id][tag_name] = item['value']
+    
+    def _get_cached_value(self, device_id: str, tag_name: str):
+        if device_id in self._device_data_cache:
+            return self._device_data_cache[device_id].get(tag_name)
+        return None
+    
+    def _update_cached_value(self, device_id: str, tag_name: str, value: Any):
+        if device_id not in self._device_data_cache:
+            self._device_data_cache[device_id] = {}
+        self._device_data_cache[device_id][tag_name] = value
+    
+    def _is_cache_valid(self, device_id: str) -> bool:
+        last_time = self._last_processed_timestamp.get(device_id, 0)
+        return (time.time() - last_time) < self._cache_valid_duration
 
     def prepare_socketio_data(self):
         device_data_map = {}
@@ -278,6 +327,27 @@ class DataProcessor:
         active_faults_with_duration = self.fault_tracker.get_active_faults()
         severity = 'critical' if fault_result['has_critical'] else 'warning'
         
+        # 获取活动故障名称列表用于推理
+        active_fault_names = [f['fault_name'] for f in active_faults_with_duration]
+        
+        # 执行故障推理
+        inferences = []
+        if active_fault_names:
+            try:
+                inferences = self.fault_reasoner.infer_root_cause(device_id, active_fault_names)
+                inference_dicts = [inf.to_dict() for inf in inferences]
+                
+                with self.inference_lock:
+                    self.latest_fault_inferences.extend(inference_dicts)
+                    if len(self.latest_fault_inferences) > 20:
+                        self.latest_fault_inferences = self.latest_fault_inferences[-20:]
+                
+                for inference in inferences:
+                    if inference.root_cause:
+                        print(f"[{device_id}] Root cause inference: '{inference.fault_name}' -> '{inference.root_cause}' (confidence: {inference.confidence_score:.2f})")
+            except Exception as e:
+                print(f"[{device_id}] Fault reasoning error: {e}")
+        
         # 更新最新故障状态
         with self.fault_lock:
             self.latest_fault_status[device_id] = {
@@ -288,13 +358,16 @@ class DataProcessor:
                 'active_faults': active_faults_with_duration,
                 'fault_analysis': fault_result['analysis'],
                 'severity': severity,
-                'device_type': device_type
+                'device_type': device_type,
+                'inferences': [inf.to_dict() for inf in inferences] if inferences else []
             }
         
         # 打印日志
         print(f"[{device_id}] Fault Analysis ({device_type}): {len(active_faults_with_duration)} active faults, Critical: {fault_result['has_critical']}")
         if fault_result['total_faults'] > 0:
             print(f"[{device_id}] Active faults: {fault_result['active_faults'][:5]}...")
+        if inferences:
+            print(f"[{device_id}] Inferred {len(inferences)} root causes")
     
     def _get_device_type(self, device_id: str) -> Optional[str]:
         """

@@ -1,8 +1,11 @@
 from flask import jsonify, request
 from src.data.data_storage import DataStorage
 from src.devices import DeviceManager
+from src.startup import get_startup_manager
+from src.utils import get_error_handler
 import json
 import os
+import time
 
 data_storage = DataStorage()
 
@@ -25,6 +28,53 @@ def save_custom_rules(rules):
 
 
 def register_routes(app, device_manager: DeviceManager):
+    @app.route('/api/health', methods=['GET'])
+    def get_health():
+        startup_manager = get_startup_manager()
+        context = startup_manager.context
+        
+        if context.is_failed():
+            return jsonify({
+                'status': 'unhealthy',
+                'reason': 'startup_failed',
+                'error': context.error_message,
+                'current_phase': context.current_phase.value,
+                'timestamp': time.time()
+            }), 503
+        
+        if not context.is_complete():
+            return jsonify({
+                'status': 'starting',
+                'current_phase': context.current_phase.value,
+                'progress': context.get_progress(),
+                'timestamp': time.time()
+            }), 200
+        
+        devices = device_manager.list_devices()
+        connected_count = sum(1 for d in devices if d.get('connected', False))
+        total_count = len(devices)
+        
+        health_status = 'healthy' if connected_count == total_count else 'degraded'
+        
+        return jsonify({
+            'status': health_status,
+            'version': '3.1',
+            'current_phase': context.current_phase.value,
+            'start_time': context.start_time,
+            'uptime': time.time() - context.start_time,
+            'devices': {
+                'total': total_count,
+                'connected': connected_count,
+                'disconnected': total_count - connected_count
+            },
+            'timestamp': time.time()
+        })
+
+    @app.route('/api/startup/status', methods=['GET'])
+    def get_startup_status():
+        startup_manager = get_startup_manager()
+        return jsonify(startup_manager.context.to_dict())
+
     @app.route('/api/status', methods=['GET'])
     def get_status():
         try:
@@ -86,6 +136,74 @@ def register_routes(app, device_manager: DeviceManager):
                 'success': True,
                 'results': results
             })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/connection/pool', methods=['GET'])
+    def get_connection_pool_summary():
+        try:
+            summary = device_manager.get_connection_pool_summary()
+            return jsonify(summary)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/device/<device_id>/connection_stats', methods=['GET'])
+    def get_device_connection_stats(device_id):
+        try:
+            stats = device_manager.get_device_connection_stats(device_id)
+            if stats:
+                return jsonify(stats)
+            return jsonify({'error': 'Device not found'}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/errors', methods=['GET'])
+    def get_errors():
+        try:
+            error_handler = get_error_handler()
+            limit = request.args.get('limit', 20, type=int)
+            errors = error_handler.get_recent_errors(limit)
+            counts = error_handler.get_error_counts()
+            
+            return jsonify({
+                'errors': errors,
+                'counts': counts,
+                'total': len(errors)
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/errors/clear', methods=['POST'])
+    def clear_errors():
+        try:
+            error_handler = get_error_handler()
+            error_handler.clear_errors()
+            return jsonify({'success': True, 'message': 'Error logs cleared'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/storage/stats', methods=['GET'])
+    def get_storage_stats():
+        try:
+            stats = data_storage.get_storage_stats()
+            return jsonify(stats)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/storage/optimize', methods=['POST'])
+    def optimize_storage():
+        try:
+            result = data_storage.optimize_database()
+            return jsonify({'success': result, 'message': 'Database optimization completed'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/storage/cleanup', methods=['POST'])
+    def cleanup_storage():
+        try:
+            days = request.args.get('days', 30, type=int)
+            result = data_storage.delete_old_data(days)
+            return jsonify({'success': result, 'message': f'Deleted data older than {days} days'})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 

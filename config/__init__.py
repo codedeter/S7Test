@@ -1,5 +1,6 @@
-# Configuration module
-from .config import config, Config
+# Configuration module for PLC Monitor System
+
+from .config import config, Config, get_config, load_config_from_env
 from .plc_tags import plc_tags
 from .devices_config import (
     create_device_configs,
@@ -11,9 +12,16 @@ from .devices_config import (
 )
 
 __all__ = [
+    # Core config
     'config',
     'Config',
+    'get_config',
+    'load_config_from_env',
+    
+    # PLC tags
     'plc_tags',
+    
+    # Device configuration
     'create_device_configs',
     'add_device_config',
     'remove_device_config',

@@ -23,6 +23,45 @@ from .configurable_fault_detector import (
     create_rx_detector,
     create_detector_from_config
 )
+from .fault_tracker import FaultTracker, AnomalyTracker
+from .anomaly_detector import (
+    AdvancedAnomalyDetector,
+    AnomalyAggregator,
+    AnomalyLevel,
+    AnomalyType,
+    AnomalyContext,
+    create_anomaly_detector,
+    create_anomaly_aggregator
+)
+from .enhanced_fault_detector import (
+    EnhancedFaultDetector,
+    FaultSeverity,
+    FaultCategory,
+    FaultDefinition,
+    ActiveFault,
+    RXSeriesFaultDefinitions,
+    create_enhanced_fault_detector
+)
+from .fault_reasoner import (
+    FaultReasoningEngine,
+    FaultRelation,
+    FaultRelationType,
+    InferenceResult,
+    ReasoningConfidence,
+    create_fault_reasoner
+)
+from .enhanced_fault_reasoner import (
+    EnhancedFaultReasoner,
+    FaultOccurrence,
+    InferenceStrategy,
+    create_enhanced_fault_reasoner
+)
+from .io_fault_integrator import (
+    IOFaultIntegrator,
+    IOFaultMapping,
+    IOInferenceResult,
+    create_io_fault_integrator
+)
 
 __all__ = [
     'DataAnalyzer',
@@ -54,4 +93,40 @@ __all__ = [
     'is_rx_series_device',
     'get_slider_down_detector',
     'RXSeriesFaultAnalyzer',
+    # 故障跟踪器
+    'FaultTracker',
+    'AnomalyTracker',
+    # 增强异常检测
+    'AdvancedAnomalyDetector',
+    'AnomalyAggregator',
+    'AnomalyLevel',
+    'AnomalyType',
+    'AnomalyContext',
+    'create_anomaly_detector',
+    'create_anomaly_aggregator',
+    # 增强故障检测
+    'EnhancedFaultDetector',
+    'FaultSeverity',
+    'FaultCategory',
+    'FaultDefinition',
+    'ActiveFault',
+    'RXSeriesFaultDefinitions',
+    'create_enhanced_fault_detector',
+    # 故障推理引擎
+    'FaultReasoningEngine',
+    'FaultRelation',
+    'FaultRelationType',
+    'InferenceResult',
+    'ReasoningConfidence',
+    'create_fault_reasoner',
+    # 增强版故障推理引擎
+    'EnhancedFaultReasoner',
+    'FaultOccurrence',
+    'InferenceStrategy',
+    'create_enhanced_fault_reasoner',
+    # IO故障集成器
+    'IOFaultIntegrator',
+    'IOFaultMapping',
+    'IOInferenceResult',
+    'create_io_fault_integrator',
 ]

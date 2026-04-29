@@ -19,9 +19,8 @@
 - `GET /api/fault-rules/devices` - 获取支持的设备列表
 - `POST /api/fault-rules/reload` - 重新加载规则
 
-### 2. 前端组件文件
-- `public/fault_rules_styles.html` - CSS样式
-- `public/fault_rules_ui.html` - HTML结构和JavaScript
+### 2. 规则存储
+- `config/custom_fault_rules.json` - 自定义规则存储文件
 
 ## 集成步骤
 
@@ -179,6 +178,7 @@
       </div>
       <div class="modal-body">
         <form id="rule-form">
+          <input type="hidden" id="rule-edit-id">
           <div class="form-group">
             <label>规则名称 *</label>
             <input type="text" id="rule-name" required placeholder="如：自定义故障1">
@@ -232,7 +232,177 @@
 
 ### 步骤4: 添加JavaScript
 
-在 `<script>` 标签内添加故障规则管理代码（见 `public/fault_rules_ui.html` 文件中的JavaScript部分）。
+在 `<script>` 标签内添加故障规则管理代码：
+
+```javascript
+let editingRule = null;
+
+function loadFaultRules(deviceType = 'RXB800') {
+  fetch(`/api/fault-rules?device_type=${deviceType}`)
+    .then(res => res.json())
+    .then(data => {
+      renderRules(data);
+      renderStats(data);
+    })
+    .catch(err => console.error('加载规则失败:', err));
+}
+
+function renderStats(data) {
+  const stats = document.getElementById('rules-stats');
+  stats.innerHTML = `
+    <div class="stat-item">总数: <strong>${data.total_count}</strong></div>
+    <div class="stat-item">内置: <strong>${data.builtin_rules?.length || 0}</strong></div>
+    <div class="stat-item">自定义: <strong>${data.custom_rules?.length || 0}</strong></div>
+  `;
+}
+
+function renderRules(data) {
+  const list = document.getElementById('fault-rules-list');
+  let html = '';
+  
+  if (data.builtin_rules && data.builtin_rules.length > 0) {
+    html += '<div class="rules-section"><h4>内置规则</h4>';
+    data.builtin_rules.forEach(rule => {
+      html += renderRuleItem(rule, true);
+    });
+    html += '</div>';
+  }
+  
+  if (data.custom_rules && data.custom_rules.length > 0) {
+    html += '<div class="rules-section"><h4>自定义规则</h4>';
+    data.custom_rules.forEach(rule => {
+      html += renderRuleItem(rule, false);
+    });
+    html += '</div>';
+  }
+  
+  list.innerHTML = html || '<p style="color: #999; text-align: center;">暂无规则</p>';
+}
+
+function renderRuleItem(rule, isBuiltin) {
+  const severityClass = `severity-${rule.severity}`;
+  return `
+    <div class="rule-item ${isBuiltin ? 'builtin' : 'custom'}">
+      <div class="rule-header">
+        <span class="rule-name">${rule.name}</span>
+        <span class="rule-badge ${severityClass}">${getSeverityText(rule.severity)}</span>
+        ${isBuiltin ? '<span class="rule-badge builtin-badge">内置</span>' : ''}
+      </div>
+      <div class="rule-details">
+        <span>位位置: ${rule.bit_position}</span>
+        ${rule.unit ? `<span>单位: ${rule.unit}</span>` : ''}
+      </div>
+      ${rule.description ? `<div class="rule-desc">${rule.description}</div>` : ''}
+      ${!isBuiltin ? `
+        <div class="rule-actions">
+          <button class="btn-small" onclick="editRule(${JSON.stringify(rule).replace(/"/g, '&quot;')})">编辑</button>
+          <button class="btn-small btn-danger" onclick="deleteRule('${rule.name}')">删除</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function getSeverityText(severity) {
+  const map = { critical: '紧急', warning: '警告', info: '信息' };
+  return map[severity] || severity;
+}
+
+function showAddRuleModal() {
+  editingRule = null;
+  document.getElementById('rule-modal-title').textContent = '添加故障规则';
+  document.getElementById('rule-edit-id').value = '';
+  document.getElementById('rule-form').reset();
+  document.getElementById('rule-modal-overlay').style.display = 'flex';
+}
+
+function editRule(rule) {
+  editingRule = rule;
+  document.getElementById('rule-modal-title').textContent = '编辑故障规则';
+  document.getElementById('rule-edit-id').value = rule.name;
+  document.getElementById('rule-name').value = rule.name;
+  document.getElementById('rule-bit-position').value = rule.bit_position;
+  document.getElementById('rule-severity').value = rule.severity;
+  document.getElementById('rule-description').value = rule.description || '';
+  document.getElementById('rule-condition-type').value = rule.condition_type || 'status';
+  document.getElementById('rule-threshold-var').value = rule.threshold_var || '';
+  document.getElementById('rule-related-vars').value = (rule.related_variables || []).join(',');
+  document.getElementById('rule-unit').value = rule.unit || '';
+  document.getElementById('rule-modal-overlay').style.display = 'flex';
+}
+
+function closeRuleModal() {
+  document.getElementById('rule-modal-overlay').style.display = 'none';
+  editingRule = null;
+}
+
+document.getElementById('rule-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const deviceType = document.getElementById('device-selector').value;
+  const data = {
+    device_type: deviceType,
+    name: document.getElementById('rule-name').value,
+    bit_position: parseInt(document.getElementById('rule-bit-position').value),
+    severity: document.getElementById('rule-severity').value,
+    description: document.getElementById('rule-description').value,
+    condition_type: document.getElementById('rule-condition-type').value,
+    threshold_var: document.getElementById('rule-threshold-var').value || null,
+    related_variables: document.getElementById('rule-related-vars').value
+      ? document.getElementById('rule-related-vars').value.split(',').map(s => s.trim())
+      : [],
+    unit: document.getElementById('rule-unit').value || ''
+  };
+  
+  const method = editingRule ? 'PUT' : 'POST';
+  const url = editingRule 
+    ? `/api/fault-rules/${encodeURIComponent(editingRule.name)}`
+    : '/api/fault-rules';
+  
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(() => {
+    closeRuleModal();
+    loadFaultRules(deviceType);
+  })
+  .catch(err => console.error('保存规则失败:', err));
+});
+
+function deleteRule(ruleName) {
+  if (!confirm(`确定要删除规则 "${ruleName}" 吗？`)) return;
+  
+  const deviceType = document.getElementById('device-selector').value;
+  
+  fetch(`/api/fault-rules/${encodeURIComponent(ruleName)}`, {
+    method: 'DELETE',
+    headers: { 'device_type': deviceType }
+  })
+  .then(res => res.json())
+  .then(() => {
+    loadFaultRules(deviceType);
+  })
+  .catch(err => console.error('删除规则失败:', err));
+}
+
+function reloadRules() {
+  fetch('/api/fault-rules/reload', { method: 'POST' })
+    .then(res => res.json())
+    .then(() => {
+      const deviceType = document.getElementById('device-selector').value;
+      loadFaultRules(deviceType);
+      alert('规则已重新加载');
+    })
+    .catch(err => console.error('重新加载失败:', err));
+}
+
+document.getElementById('device-selector').addEventListener('change', function() {
+  loadFaultRules(this.value);
+});
+```
 
 ## 使用说明
 
@@ -301,8 +471,35 @@
 ### PUT /api/fault-rules/<rule_name>
 更新自定义故障规则
 
+**请求体**: 同POST
+
 ### DELETE /api/fault-rules/<rule_name>
 删除自定义故障规则
 
+**请求头**: `device_type` - 设备类型
+
 ### POST /api/fault-rules/reload
 重新加载故障规则
+
+### GET /api/fault-rules/devices
+获取支持的设备类型列表
+
+**响应**:
+```json
+{
+  "devices": ["RXB800", "RXA1300"]
+}
+```
+
+## 故障规则字段说明
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `name` | string | 是 | 规则名称（唯一标识） |
+| `bit_position` | integer | 是 | DB51中的位位置 |
+| `severity` | string | 是 | 严重程度: critical/warning/info |
+| `description` | string | 否 | 故障描述 |
+| `condition_type` | string | 否 | 检测类型: status/analog |
+| `threshold_var` | string | 否 | 动态阈值变量名 |
+| `related_variables` | array | 否 | 相关变量列表 |
+| `unit` | string | 否 | 单位 |
