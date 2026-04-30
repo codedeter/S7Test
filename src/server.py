@@ -60,6 +60,10 @@ def start_background_connection(device_manager: DeviceManager):
         print('[Background] Starting device connections...')
         print(f'[Background] Devices to connect: {list(device_manager.devices.keys())}')
         
+        # 立即启动健康检查，确保重连机制在后台运行
+        print('[Background] Starting connection health check early...')
+        device_manager._connection_pool.start_health_check()
+        
         try:
             results = device_manager.connect_all()
             print(f'[Background] Connection results: {results}')
@@ -68,7 +72,7 @@ def start_background_connection(device_manager: DeviceManager):
                 if success:
                     print(f'[Background] ✓ {device_id} connected successfully')
                 else:
-                    print(f'[Background] ✗ {device_id} connection failed')
+                    print(f'[Background] ✗ {device_id} connection failed - will retry automatically')
                     
         except Exception as e:
             print(f'[Background] Connection error: {e}')
@@ -130,7 +134,7 @@ def main():
         startup_manager.start_phase(StartupPhase.FLASK_APP_CREATE)
         print('\n[4/7] Creating Flask app...')
         app = create_app()
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', transports=['polling'])
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
         startup_manager.complete_phase(StartupPhase.FLASK_APP_CREATE, "Flask app created")
 
         startup_manager.start_phase(StartupPhase.ROUTES_REGISTER)

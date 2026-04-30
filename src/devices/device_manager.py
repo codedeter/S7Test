@@ -40,46 +40,66 @@ class BreakpointData:
 class PLCClient:
     def __init__(self, config: DeviceConfig):
         self.config = config
-        self.client = snap7.client.Client()
+        self.client = None
         self.connected = False
         self.connection_attempts = 0
         self.last_connection_time = None
         self.last_disconnect_time = None
         self._lock = threading.Lock()
         self._last_error = None
+        print(f"[{self.config.device_id}] PLCClient initialized for {self.config.ip_address}:{self.config.rack}/{self.config.slot}")
     
     def connect(self) -> bool:
         with self._lock:
             try:
                 self._last_error = None
                 
-                self.client.set_connection_type(3)
+                # 每次都创建新的client，避免之前的client状态问题
+                if self.client:
+                    try:
+                        self.client.disconnect()
+                    except:
+                        pass
+                self.client = snap7.client.Client()
                 
-                devnull = io.StringIO()
-                with redirect_stderr(devnull):
-                    self.client.connect(
-                        self.config.ip_address,
-                        self.config.rack,
-                        self.config.slot
-                    )
+                print(f"[{self.config.device_id}] Attempting connection to {self.config.ip_address} (rack={self.config.rack}, slot={self.config.slot})...")
+                
+                # 直接连接，不设置连接类型
+                self.client.connect(
+                    self.config.ip_address,
+                    self.config.rack,
+                    self.config.slot
+                )
                 
                 self.connected = True
                 self.connection_attempts = 0
                 self.last_connection_time = time.time()
-                print(f"[{self.config.device_id}] Connection successful to {self.config.ip_address}")
+                print(f"[{self.config.device_id}] OK Connection successful to {self.config.ip_address}")
                 return True
                 
             except Exception as e:
                 self.connected = False
                 self.connection_attempts += 1
                 self._last_error = str(e)
-                print(f"[{self.config.device_id}] Connection failed (attempt {self.connection_attempts}): {e}")
+                error_msg = str(e).lower()
+                
+                if "connection refused" in error_msg:
+                    status = "Connection refused - PLC may be offline or wrong IP/port"
+                elif "timeout" in error_msg:
+                    status = "Connection timeout - network issue or PLC not responding"
+                elif "no route" in error_msg:
+                    status = "No route to host - check network connection"
+                else:
+                    status = str(e)
+                
+                print(f"[{self.config.device_id}] ERROR Connection failed (attempt {self.connection_attempts}): {status}")
                 return False
     
     def disconnect(self):
         with self._lock:
             try:
-                self.client.disconnect()
+                if self.client:
+                    self.client.disconnect()
             except Exception as e:
                 print(f"[{self.config.device_id}] Disconnect warning: {e}")
             finally:
@@ -103,7 +123,7 @@ class PLCClient:
     
     def check_connection(self) -> bool:
         with self._lock:
-            if not self.connected:
+            if not self.connected or not self.client:
                 return False
             try:
                 self.connected = self.client.get_connected()
@@ -114,17 +134,10 @@ class PLCClient:
     
     def read_db(self, db_number: int, start: int, size: int) -> Optional[bytes]:
         with self._lock:
-            if not self.connected:
-                try:
-                    self.connected = self.client.get_connected()
-                except:
-                    self.connected = False
-                if not self.connected:
-                    return None
+            if not self.connected or not self.client:
+                return None
             try:
-                devnull = io.StringIO()
-                with redirect_stderr(devnull):
-                    data = self.client.db_read(db_number, start, size)
+                data = self.client.db_read(db_number, start, size)
                 return bytes(data)
             except Exception as e:
                 error_str = str(e)
@@ -136,7 +149,7 @@ class PLCClient:
     
     def read_m(self, start: int, size: int) -> Optional[bytes]:
         with self._lock:
-            if not self.connected:
+            if not self.connected or not self.client:
                 return None
             try:
                 data = self.client.mb_read(start, size)
@@ -147,7 +160,7 @@ class PLCClient:
     
     def read_i(self, start: int, size: int) -> Optional[bytes]:
         with self._lock:
-            if not self.connected:
+            if not self.connected or not self.client:
                 return None
             try:
                 data = self.client.eb_read(start, size)
@@ -158,7 +171,7 @@ class PLCClient:
     
     def read_q(self, start: int, size: int) -> Optional[bytes]:
         with self._lock:
-            if not self.connected:
+            if not self.connected or not self.client:
                 return None
             try:
                 data = self.client.ab_read(start, size)
@@ -257,13 +270,37 @@ class DeviceCollector:
         mapping = self.db_mappings[db.number]
         type_vars = self.db_type_vars.get(db.number, {})
         
-        max_addr = max((addr for addr in mapping.keys()), default=0)
-        read_size = min(max_addr + 20, 256)
+        # 计算需要读取的精确大小
+        max_addr = 0
         
+        # 检查 bool 变量地址
+        for addr in mapping.keys():
+            if addr > max_addr:
+                max_addr = addr
+        
+        # 检查其他类型变量的地址（考虑数据类型长度）
+        type_length_map = {'INT': 2, 'DINT': 4, 'REAL': 4}
+        for dtype, vars_list in type_vars.items():
+            for addr, var_name in vars_list:
+                length = type_length_map.get(dtype, 1)
+                if addr + length > max_addr:
+                    max_addr = addr + length
+        
+        # 确定读取大小
+        read_size = min(max_addr + 10, 512)  # 安全上限 512 字节
         if db.size > 0:
             read_size = db.size
         
-        db_data = self.client.read_db(db.number, 0, read_size)
+        # 读取数据，带错误处理和安全策略
+        db_data = None
+        current_size = read_size
+        while current_size > 0 and db_data is None:
+            try:
+                db_data = self.client.read_db(db.number, 0, current_size)
+            except Exception:
+                # 失败，尝试读取更小的大小
+                current_size = max(1, current_size // 2)
+        
         if not db_data:
             return data
         
@@ -305,21 +342,42 @@ class DeviceCollector:
         if not vars_cache:
             return data
         
-        max_offset = max((v[2] for v in vars_cache), default=0)
-        read_size = max_offset + 20
+        # 计算需要读取的精确大小，考虑数据类型长度
+        max_offset = 0
+        area_type_length_map = {'BYTE': 1, 'WORD': 2, 'DWORD': 4}
         
-        if read_func == self.client.read_m:
-            area_data = self.client.read_m(0, read_size)
-        elif read_func == self.client.read_i:
-            area_data = self.client.read_i(0, read_size)
-        elif read_func == self.client.read_q:
-            area_data = self.client.read_q(0, read_size)
-        else:
-            return data
+        for v in vars_cache:
+            name, area, offset, dtype, bit = v
+            dtype_upper = dtype.upper()
+            length = area_type_length_map.get(dtype_upper, 1)
+            if offset + length > max_offset:
+                max_offset = offset + length
+        
+        # 安全的读取大小上限
+        max_safe_size = 256
+        read_size = min(max_offset + 10, max_safe_size)
+        
+        # 安全的读取策略：如果失败就逐步减少要读取的大小
+        area_data = None
+        current_size = read_size
+        while current_size > 0 and area_data is None:
+            try:
+                if read_func == self.client.read_m:
+                    area_data = self.client.read_m(0, current_size)
+                elif read_func == self.client.read_i:
+                    area_data = self.client.read_i(0, current_size)
+                elif read_func == self.client.read_q:
+                    area_data = self.client.read_q(0, current_size)
+                else:
+                    break
+            except Exception:
+                # 失败，尝试读取更小的大小
+                current_size = max(1, current_size // 2)
         
         if not area_data:
             return data
         
+        area_type_length_map = {'BYTE': 1, 'WORD': 2, 'DWORD': 4}
         for name, area, offset, dtype, bit in vars_cache:
             if dtype.upper() == 'BOOL' and offset < len(area_data):
                 val = (area_data[offset] >> bit) & 0x01
@@ -330,14 +388,26 @@ class DeviceCollector:
                     'value': val,
                     'quality': 1
                 })
-            elif dtype.upper() in ('BYTE', 'WORD', 'DWORD') and offset < len(area_data):
-                data.append({
-                    'db_number': 0,
-                    'address': offset,
-                    'tag_name': name,
-                    'value': area_data[offset],
-                    'quality': 1
-                })
+            elif dtype.upper() in ('BYTE', 'WORD', 'DWORD'):
+                dtype_upper = dtype.upper()
+                required_len = area_type_length_map.get(dtype_upper, 1)
+                if offset + required_len <= len(area_data):
+                    if dtype_upper == 'BYTE':
+                        val = area_data[offset]
+                    elif dtype_upper == 'WORD':
+                        val = int.from_bytes(area_data[offset:offset+2], 'big')
+                    elif dtype_upper == 'DWORD':
+                        val = int.from_bytes(area_data[offset:offset+4], 'big')
+                    else:
+                        val = area_data[offset]
+                    
+                    data.append({
+                        'db_number': 0,
+                        'address': offset,
+                        'tag_name': name,
+                        'value': val,
+                        'quality': 1
+                    })
         
         return data
 
@@ -465,39 +535,48 @@ class DeviceManager:
         return self._breakpoint_data.copy()
     
     def connect_device(self, device_id: str) -> bool:
+        print(f"[{device_id}] Starting connection attempt...")
         with self._lock:
             if device_id not in self.clients:
                 print(f"[{device_id}] Device not found")
                 return False
             
+            device_config = self.devices[device_id]
             client = self.clients[device_id]
             self.statuses[device_id].status = ConnectionStatus.CONNECTING
+            print(f"[{device_id}] Connection target: {device_config.ip_address}, Rack: {device_config.rack}, Slot: {device_config.slot}")
         
         self._connection_pool.set_state(device_id, ConnectionState.CONNECTING)
         
         try:
-            success = client.connect()
-            
-            with self._lock:
-                if success:
-                    self.statuses[device_id].status = ConnectionStatus.CONNECTED
-                    self.statuses[device_id].connected = True
-                    self.statuses[device_id].last_update = time.time()
-                    self._connection_pool.set_state(device_id, ConnectionState.CONNECTED)
-                    print(f"[{device_id}] Device connected successfully")
-                    return True
-                else:
-                    self.statuses[device_id].status = ConnectionStatus.CONNECTING
-                    self.statuses[device_id].connected = False
-                    self._on_connection_lost(device_id, f"Connection failed: {client.get_last_error()}")
-                    self._start_reconnect_loop(device_id)
-                    return False
-                    
+                success = client.connect()
+                
+                with self._lock:
+                    if success:
+                        self.statuses[device_id].status = ConnectionStatus.CONNECTED
+                        self.statuses[device_id].connected = True
+                        self.statuses[device_id].last_update = time.time()
+                        self._connection_pool.set_state(device_id, ConnectionState.CONNECTED)
+                        print(f"[{device_id}] OK Device connected successfully")
+                        return True
+                    else:
+                        self.statuses[device_id].status = ConnectionStatus.CONNECTING
+                        self.statuses[device_id].connected = False
+                        error_msg = f"Connection failed: {client.get_last_error()}"
+                        print(f"[{device_id}] ERROR {error_msg}")
+                        self._on_connection_lost(device_id, error_msg)
+                        self._start_reconnect_loop(device_id)
+                        return False
+                        
         except Exception as e:
+            error_msg = f"Connection exception: {str(e)}"
+            print(f"[{device_id}] ERROR {error_msg}")
+            import traceback
+            traceback.print_exc()
             with self._lock:
                 self.statuses[device_id].status = ConnectionStatus.CONNECTING
                 self.statuses[device_id].connected = False
-                self._on_connection_lost(device_id, f"Connection exception: {e}")
+                self._on_connection_lost(device_id, error_msg)
                 self._start_reconnect_loop(device_id)
             return False
     
@@ -518,20 +597,27 @@ class DeviceManager:
             
             max_attempts = config.max_retry_attempts
             
+            print(f"[{device_id}] Starting automatic reconnection loop (infinite retries)")
+            
             while self._reconnecting.get(device_id, False):
                 try:
                     client = self.clients.get(device_id)
                     if not client:
+                        print(f"[{device_id}] Client not found, stopping reconnection")
                         break
                     
                     retry_interval = self._connection_pool.get_retry_interval(client.connection_attempts)
                     print(f"[{device_id}] Waiting {retry_interval:.2f}s before reconnect attempt {client.connection_attempts + 1}")
                     time.sleep(retry_interval)
                     
+                    if not self._reconnecting.get(device_id, False):
+                        break
+                    
                     print(f"[{device_id}] Attempting reconnect...")
                     
                     if client.connect():
                         self._on_connection_restored(device_id)
+                        print(f"[{device_id}] Reconnection successful!")
                         self._reconnecting[device_id] = False
                         break
                     
@@ -546,27 +632,36 @@ class DeviceManager:
                         
                 except Exception as e:
                     print(f"[{device_id}] Reconnect error: {e}")
+                    import traceback
+                    traceback.print_exc()
         
         thread = threading.Thread(target=reconnect_loop, daemon=True)
         self._reconnect_threads[device_id] = thread
         thread.start()
     
     def connect_all(self) -> Dict[str, bool]:
+        print(f"[DeviceManager] Starting connection process for {len(self.devices)} devices")
         results = {}
         futures = {}
         
         for device_id in self.devices:
+            print(f"[DeviceManager] Queueing connection for device: {device_id}")
             future = self._thread_pool.submit(self.connect_device, device_id)
             futures[future] = device_id
         
         for future in as_completed(futures):
             device_id = futures[future]
             try:
-                results[device_id] = future.result(timeout=30)
+                results[device_id] = future.result(timeout=60)
+                status = "SUCCESS" if results[device_id] else "FAILED"
+                print(f"[DeviceManager] Connection {status} for device: {device_id}")
             except Exception as e:
                 results[device_id] = False
-                print(f"[{device_id}] Connection timeout: {e}")
+                print(f"[DeviceManager] Connection timeout or error for device {device_id}: {e}")
+                # 即使连接超时也启动重连循环
+                self._start_reconnect_loop(device_id)
         
+        print(f"[DeviceManager] Connection process completed. Results: {results}")
         return results
     
     def disconnect_device(self, device_id: str):
@@ -721,7 +816,10 @@ class DeviceManager:
     
     def start_collection(self, interval: float = 0.1):
         self._running = True
-        self._connection_pool.start_health_check()
+        # 健康检查可能已经在后台运行了，只需要确保它启动
+        if not hasattr(self._connection_pool, '_health_check_running') or not self._connection_pool._health_check_running:
+            print("[DeviceManager] Starting connection health check for data collection")
+            self._connection_pool.start_health_check()
         
         def collection_loop():
             while self._running:

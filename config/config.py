@@ -6,7 +6,7 @@ and support for environment variable overrides.
 """
 
 import os
-from typing import Optional
+from typing import Optional, Dict
 
 
 class Config:
@@ -30,13 +30,28 @@ class Config:
     - LOGGING_FILE -> LOGGING_FILE
     """
     
+    # Base Paths
+    BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    PLC_DEFINITIONS_DIR: str = os.path.join(BASE_DIR, 'plc_definitions')
+    
+    # Device ID to XLSX file mapping
+    DEVICE_XLSX_MAPPING: Dict[str, str] = {
+        'plc_001': 'RXA1300PLCTags.xlsx',
+        'plc_002': 'RXB800PLCTags.xlsx',
+        'plc_rxa800': 'RXA800PLCTags.xlsx',
+        'plc_rxa630_1': 'RXA630-1PLCTags.xlsx',
+        'plc_rxa630_2': 'RXA630-2PLCTags.xlsx',
+        'plc_rxa630_3': 'RXA630-3PLCTags.xlsx',
+        'plc_rxa630_4': 'RXA630-4PLCTags.xlsx',
+    }
+    
     # PLC Connection Settings
     PLC_HOST: str = os.environ.get('PLC_HOST', '172.15.14.150')
     PLC_RACK: int = int(os.environ.get('PLC_RACK', '0'))
     PLC_SLOT: int = int(os.environ.get('PLC_SLOT', '1'))
-    PLC_CONNECTION_TIMEOUT: int = int(os.environ.get('PLC_CONNECTION_TIMEOUT', '5000'))
-    PLC_RETRY_INTERVAL: int = int(os.environ.get('PLC_RETRY_INTERVAL', '3000'))
-    PLC_MAX_RETRY_ATTEMPTS: int = int(os.environ.get('PLC_MAX_RETRY_ATTEMPTS', '10'))
+    PLC_CONNECTION_TIMEOUT: int = int(os.environ.get('PLC_CONNECTION_TIMEOUT', '10000'))
+    PLC_RETRY_INTERVAL: int = int(os.environ.get('PLC_RETRY_INTERVAL', '5000'))
+    PLC_MAX_RETRY_ATTEMPTS: int = int(os.environ.get('PLC_MAX_RETRY_ATTEMPTS', '0'))
     PLC_RECONNECT_BACKOFF_ENABLED: bool = bool(int(os.environ.get('PLC_RECONNECT_BACKOFF_ENABLED', '1')))
     
     # Data Collection Settings
@@ -80,6 +95,10 @@ class Config:
     # Health Check Settings
     HEALTH_CHECK_ENABLED: bool = bool(int(os.environ.get('HEALTH_CHECK_ENABLED', '1')))
     HEALTH_CHECK_INTERVAL: int = int(os.environ.get('HEALTH_CHECK_INTERVAL', '30'))
+    
+    # Simulation Mode Settings
+    SIMULATION_MODE: bool = bool(int(os.environ.get('SIMULATION_MODE', '1')))  # 默认启用模拟模式
+    SIMULATION_DATA_ENABLED: bool = bool(int(os.environ.get('SIMULATION_DATA_ENABLED', '1')))  # 启用模拟数据生成
     
     def __repr__(self) -> str:
         return f"<Config PLC_HOST={self.PLC_HOST} SERVER_PORT={self.SERVER_PORT}>"

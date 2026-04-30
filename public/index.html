@@ -835,31 +835,28 @@
     }
 
     socket.on('data', (packet) => {
-        // 最简单直接的调试：先看看有没有数据进来！！！
-        console.log('!!!!!!!!!! DATA RECEIVED !!!!!!!!!!');
-        console.log('Packet received:', packet);
-        console.log('Device ID:', packet.device_id);
-        console.log('Current values count:', Object.keys(packet.current_values || {}).length);
-        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        // 检查数据包结构
+        let deviceId, currentValues, historyData;
         
-        const deviceId = packet.device_id || 'unknown';
-        const currentValues = packet.current_values || {};
-        const historyData = packet.history_data || [];
-
-        console.log('Device ID:', deviceId);
-        console.log('Current device filter:', currentDeviceId);
-        console.log('Number of current values:', Object.keys(currentValues).length);
+        // 支持两种格式：直接结构和包装结构
+        if (packet.payload && packet.payload.current_values) {
+            // 包装结构：{type, device_id, payload: {current_values}}
+            deviceId = packet.payload.device_id || packet.device_id;
+            currentValues = packet.payload.current_values || {};
+            historyData = packet.payload.history_data || [];
+        } else {
+            // 直接结构：{device_id, current_values}
+            deviceId = packet.device_id || 'unknown';
+            currentValues = packet.current_values || {};
+            historyData = packet.history_data || [];
+        }
 
         if (currentDeviceId !== 'all' && currentDeviceId !== deviceId) {
-            console.log('Frontend: Device mismatch, skipping');
             return;
         }
 
         const currentValuesArray = Object.values(currentValues);
-        console.log('currentValuesArray length:', currentValuesArray.length);
-        
         if (currentValuesArray.length === 0) {
-            console.log('Frontend: No current values in packet');
             return;
         }
 
@@ -869,9 +866,6 @@
                 ...item,
                 tag_name: item.tag_name
             }));
-
-        console.log('Filtered data count:', filteredData.length);
-        console.log('Filtered data preview:', filteredData.slice(0, 3));
 
         if (filteredData.length === 0) {
             console.log('Frontend: All items filtered out');

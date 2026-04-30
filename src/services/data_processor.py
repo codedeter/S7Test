@@ -16,14 +16,22 @@ from src.analysis.io_fault_integrator import create_io_fault_integrator, IOFault
 from src.devices.device_manager import CollectedData
 
 
-@dataclass
 class ProcessingResult:
-    device_data_map: Dict[str, Any]
-    anomalies: List[Dict[str, Any]]
-    drools_results: List[Dict[str, Any]]
-    slider_results: List[Dict[str, Any]]
-    fault_status: Dict[str, Any]
-    fault_inferences: List[Dict[str, Any]]
+    def __init__(
+        self,
+        device_data_map: Dict[str, Any] = None,
+        anomalies: List[Dict[str, Any]] = None,
+        drools_results: List[Dict[str, Any]] = None,
+        slider_results: List[Dict[str, Any]] = None,
+        fault_status: Dict[str, Any] = None,
+        fault_inferences: List[Dict[str, Any]] = None
+    ):
+        self.device_data_map = device_data_map or {}
+        self.anomalies = anomalies or []
+        self.drools_results = drools_results or []
+        self.slider_results = slider_results or []
+        self.fault_status = fault_status or {}
+        self.fault_inferences = fault_inferences or []
 
 
 class DataProcessor:
@@ -64,7 +72,11 @@ class DataProcessor:
         初始化故障检测器
         注册所有支持的设备类型的故障检测器
         """
+        # 初始化所有支持的设备类型的故障检测器
         create_detector('RXB800')
+        create_detector('RXA1300')
+        create_detector('RXA800')
+        create_detector('RXA630')
         print("Fault detectors initialized")
         
         print("Fault reasoner initialized with default rules")
@@ -247,15 +259,6 @@ class DataProcessor:
 
                     latest_data = buffer_item['data']
                     
-                    # 打印几个关键变量的值，确认数据在变化
-                    print(f"[DataProcessor] {device_id} data sample:")
-                    count = 0
-                    for item in latest_data:
-                        tag_name = item.get('tag_name')
-                        if tag_name and count < 5:
-                            print(f"  {tag_name}: {item['value']} (DB{item['db_number']}.{item['address']})")
-                            count += 1
-                    
                     for item in latest_data:
                         tag_name = item.get('tag_name')
                         if tag_name:
@@ -382,6 +385,11 @@ class DataProcessor:
         # 设备类型映射
         device_type_map = {
             'plc_002': 'RXB800',
+            'plc_rxa800': 'RXA800',
+            'plc_rxa630_1': 'RXA630',
+            'plc_rxa630_2': 'RXA630',
+            'plc_rxa630_3': 'RXA630',
+            'plc_001': 'RXA1300',
             # 可以在这里添加更多设备类型映射
         }
         
@@ -402,19 +410,13 @@ class DataProcessor:
         fault_data = {}
         var_values = {}
         
-        # 根据设备类型提取相应的数据
-        if device_type == 'RXB800':
-            # RXB800设备：DB51包含故障位，DB1和DB10包含相关变量
-            for item in data:
-                db_number = item.get('db_number')
-                if db_number == 51:
-                    fault_data[item['tag_name']] = item['value']
-                elif db_number in (1, 10):
-                    var_values[item['tag_name']] = item['value']
-        else:
-            # 默认：提取所有数据作为故障数据
-            for item in data:
+        # 所有 RX 系列设备：DB51 包含故障位，DB1 和 DB10 包含相关变量
+        for item in data:
+            db_number = item.get('db_number')
+            if db_number == 51:
                 fault_data[item['tag_name']] = item['value']
+            elif db_number in (1, 10):
+                var_values[item['tag_name']] = item['value']
         
         return fault_data, var_values
 

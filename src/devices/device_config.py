@@ -55,8 +55,8 @@ class DeviceConfig:
     ip_address: str
     rack: int = 0
     slot: int = 1
-    connection_timeout: int = 5000
-    retry_interval: int = 3000
+    connection_timeout: int = 10000
+    retry_interval: int = 5000
     max_retry_attempts: int = 0
     reconnect_backoff_enabled: bool = True
     data_blocks: List[DataBlock] = field(default_factory=list)

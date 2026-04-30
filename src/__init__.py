@@ -1,7 +1,7 @@
 # PLC Monitor System - Main Package
 
-# Core modules
-from .server import main, create_app, register_routes
+# Core modules - imported lazily to avoid circular import
+# from .server import main, create_app, register_routes
 
 # Device management
 from .devices import (

@@ -183,10 +183,29 @@ class SocketIOHandler:
                     for device_id, full_data in device_data_map.items():
                         current_values = full_data.get('current_values', {})
                         
-                        delta_values = self.data_delta.compute_delta(device_id, current_values)
+                        if not current_values:
+                            continue
                         
-                        if delta_values:
-                            sequence = self._get_next_sequence(device_id)
+                        sequence = self._get_next_sequence(device_id)
+                        
+                        # 优化：使用增量发送策略
+                        # 每30个数据包强制发送一次全量数据，减少流量
+                        should_send_full = (sequence % 30 == 0)
+                        
+                        if should_send_full:
+                            # 发送全量数据
+                            packet_data = {
+                                'device_id': device_id,
+                                'device_name': full_data.get('device_name', device_id),
+                                'current_values': current_values,
+                                'update_type': 'full',
+                                'sequence': sequence
+                            }
+                        else:
+                            # 发送增量数据（只发送变化的值）
+                            delta_values = self.data_delta.compute_delta(device_id, current_values)
+                            if not delta_values:
+                                continue  # 没有变化，跳过发送
                             
                             packet_data = {
                                 'device_id': device_id,
@@ -195,16 +214,15 @@ class SocketIOHandler:
                                 'update_type': 'delta',
                                 'sequence': sequence
                             }
-                            
-                            packet = self.data_packer.create_packet(
-                                packet_type='data',
-                                device_id=device_id,
-                                payload=packet_data,
-                                sequence=sequence
-                            )
-                            
-                            self.socketio.emit('data', packet)
-                            print(f"[SocketIO] Emitted delta for {device_id}: {len(delta_values)} values, seq={sequence}")
+                        
+                        packet = self.data_packer.create_packet(
+                            packet_type='data',
+                            device_id=device_id,
+                            payload=packet_data,
+                            sequence=sequence
+                        )
+                        
+                        self.socketio.emit('data', packet)
                         
                         fault_status = self.data_processor.get_fault_status()
                         if device_id in fault_status:

@@ -63,6 +63,8 @@ class XLSXVariableParser:
         'USINT': 'INT',
         'UINT': 'INT',
         'UDINT': 'DINT',
+        'TIMER': 'TIMER',
+        'COUNTER': 'COUNTER',
     }
 
     NAME_KEYS = ['名称', 'Name', '变量名', 'Tag Name', '标签名', 'Tag', 'Variable']
@@ -91,20 +93,30 @@ class XLSXVariableParser:
             (re.compile(r'%IB(\d+)'), 'INPUT_BYTE'),
             (re.compile(r'%IW(\d+)'), 'INPUT_WORD'),
             (re.compile(r'%ID(\d+)'), 'INPUT_DWORD'),
+            (re.compile(r'%I(\d+)'), 'INPUT_BYTE'),
             (re.compile(r'I(\d+)\.(\d+)'), 'INPUT_BIT_NO_PERCENT'),
             (re.compile(r'IB(\d+)'), 'INPUT_BYTE_NO_PERCENT'),
+            (re.compile(r'I(\d+)'), 'INPUT_BYTE_NO_PERCENT'),
             (re.compile(r'%Q(\d+)\.(\d+)'), 'OUTPUT_BIT'),
             (re.compile(r'%QB(\d+)'), 'OUTPUT_BYTE'),
             (re.compile(r'%QW(\d+)'), 'OUTPUT_WORD'),
             (re.compile(r'%QD(\d+)'), 'OUTPUT_DWORD'),
+            (re.compile(r'%Q(\d+)'), 'OUTPUT_BYTE'),
             (re.compile(r'Q(\d+)\.(\d+)'), 'OUTPUT_BIT_NO_PERCENT'),
             (re.compile(r'QB(\d+)'), 'OUTPUT_BYTE_NO_PERCENT'),
+            (re.compile(r'Q(\d+)'), 'OUTPUT_BYTE_NO_PERCENT'),
             (re.compile(r'%M(\d+)\.(\d+)'), 'MEMORY_BIT'),
             (re.compile(r'%MB(\d+)'), 'MEMORY_BYTE'),
             (re.compile(r'%MW(\d+)'), 'MEMORY_WORD'),
             (re.compile(r'%MD(\d+)'), 'MEMORY_DWORD'),
+            (re.compile(r'%M(\d+)'), 'MEMORY_BYTE'),
             (re.compile(r'M(\d+)\.(\d+)'), 'MEMORY_BIT_NO_PERCENT'),
             (re.compile(r'MB(\d+)'), 'MEMORY_BYTE_NO_PERCENT'),
+            (re.compile(r'M(\d+)'), 'MEMORY_BYTE_NO_PERCENT'),
+            (re.compile(r'%T(\d+)'), 'TIMER'),
+            (re.compile(r'T(\d+)'), 'TIMER'),
+            (re.compile(r'%C(\d+)'), 'COUNTER'),
+            (re.compile(r'C(\d+)'), 'COUNTER'),
         ]
         return patterns
 
@@ -219,15 +231,16 @@ class XLSXVariableParser:
             
             header_lower = header.lower()
             
-            if any(key.lower() in header_lower for key in self.NAME_KEYS):
+            # Only set index if not already set to prevent overwriting
+            if 'name' not in indices and any(key.lower() in header_lower for key in self.NAME_KEYS):
                 indices['name'] = idx
-            elif any(key.lower() in header_lower for key in self.ADDRESS_KEYS):
+            elif 'address' not in indices and any(key.lower() in header_lower for key in self.ADDRESS_KEYS):
                 indices['address'] = idx
-            elif any(key.lower() in header_lower for key in self.TYPE_KEYS):
+            elif 'type' not in indices and any(key.lower() in header_lower for key in self.TYPE_KEYS):
                 indices['type'] = idx
-            elif any(key.lower() in header_lower for key in self.DESCRIPTION_KEYS):
+            elif 'description' not in indices and any(key.lower() in header_lower for key in self.DESCRIPTION_KEYS):
                 indices['description'] = idx
-            elif any(key.lower() in header_lower for key in self.ACCESS_KEYS):
+            elif 'access' not in indices and any(key.lower() in header_lower for key in self.ACCESS_KEYS):
                 indices['access'] = idx
 
         return headers, indices
@@ -331,6 +344,12 @@ class XLSXVariableParser:
                 result['offset'] = int(groups[0])
                 result['bit'] = 0
             return result
+        
+        elif pattern_type == 'TIMER':
+            return {'area': 'T', 'db': None, 'offset': int(groups[0]), 'bit': 0}
+        
+        elif pattern_type == 'COUNTER':
+            return {'area': 'C', 'db': None, 'offset': int(groups[0]), 'bit': 0}
         
         return {'area': None, 'db': None, 'offset': 0, 'bit': 0}
 

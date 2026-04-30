@@ -32,13 +32,21 @@ class DataSerializer:
 
 
 class DataDelta:
-    def __init__(self):
+    def __init__(self, max_entries_per_device: int = 1000):
         self.last_values: Dict[str, Any] = {}
         self.last_send_time: Dict[str, float] = {}
+        self.max_entries = max_entries_per_device
+        self._cleanup_counter = 0
+        self._cleanup_interval = 100  # 每100次调用清理一次
     
     def compute_delta(self, device_id: str, current_values: Dict[str, Any]) -> Dict[str, Any]:
         delta = {}
         device_key = f"device:{device_id}"
+        
+        self._cleanup_counter += 1
+        if self._cleanup_counter >= self._cleanup_interval:
+            self._cleanup_old_entries(device_id)
+            self._cleanup_counter = 0
         
         for key, value in current_values.items():
             full_key = f"{device_key}:{key}" if not key.startswith(device_id) else key
@@ -49,6 +57,17 @@ class DataDelta:
         
         self.last_send_time[device_id] = datetime.now().timestamp()
         return delta
+    
+    def _cleanup_old_entries(self, device_id: str):
+        """清理过旧的条目，限制内存使用"""
+        device_key = f"device:{device_id}"
+        device_keys = [k for k in self.last_values.keys() if device_key in k]
+        
+        if len(device_keys) > self.max_entries:
+            # 删除最旧的条目，保留最新的 max_entries 条
+            keys_to_remove = device_keys[:-self.max_entries]
+            for key in keys_to_remove:
+                del self.last_values[key]
     
     def get_full_snapshot(self, device_id: str, current_values: Dict[str, Any]) -> Dict[str, Any]:
         device_key = f"device:{device_id}"
@@ -62,12 +81,15 @@ class DataDelta:
     
     def clear_device_state(self, device_id: str):
         device_key = f"device:{device_id}"
-        keys_to_remove = [k for k in self.last_values.keys() if k.startswith(device_key)]
-        for k in keys_to_remove:
-            del self.last_values[k]
-        
+        keys_to_remove = [k for k in self.last_values.keys() if device_key in k]
+        for key in keys_to_remove:
+            del self.last_values[key]
         if device_id in self.last_send_time:
             del self.last_send_time[device_id]
+    
+    def clear_all(self):
+        self.last_values.clear()
+        self.last_send_time.clear()
 
 
 class DataPacker:

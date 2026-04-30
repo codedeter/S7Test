@@ -70,13 +70,13 @@ class ConnectionStats:
 
 @dataclass
 class ConnectionConfig:
-    max_retry_attempts: int = 10
-    base_retry_interval: float = 3.0
-    max_retry_interval: float = 60.0
-    backoff_factor: float = 2.0
+    max_retry_attempts: int = 0  # 0 = infinite
+    base_retry_interval: float = 5.0
+    max_retry_interval: float = 120.0
+    backoff_factor: float = 1.5
     enable_jitter: bool = True
-    health_check_interval: float = 10.0
-    connection_timeout: float = 10.0
+    health_check_interval: float = 30.0
+    connection_timeout: float = 15.0
     read_timeout: float = 5.0
 
 
@@ -135,13 +135,19 @@ class ConnectionPool:
             return self._stats.copy()
     
     def get_retry_interval(self, attempt: int) -> float:
-        interval = self._config.base_retry_interval * (self._config.backoff_factor ** (attempt - 1))
+        if attempt == 0:
+            return self._config.base_retry_interval
+        
+        # 指数退避，但增长更平缓
+        interval = self._config.base_retry_interval * (self._config.backoff_factor ** min(attempt - 1, 10))
         interval = min(interval, self._config.max_retry_interval)
         
         if self._config.enable_jitter:
-            jitter = interval * 0.1 * (random.random() * 2 - 1)
+            # 添加抖动来避免多个设备同时重连
+            jitter = interval * 0.2 * (random.random() * 2 - 1)
             interval = max(self._config.base_retry_interval, interval + jitter)
         
+        print(f"[ConnectionPool] Retry attempt {attempt}, interval: {interval:.2f}s")
         return interval
     
     def add_state_callback(self, callback: Callable[[str, ConnectionState, str], None]):
@@ -179,13 +185,21 @@ class ConnectionPool:
     def _perform_health_check(self):
         with self._lock:
             for device_id, conn in self._connections.items():
-                if self._states[device_id] == ConnectionState.CONNECTED:
+                current_state = self._states[device_id]
+                
+                if current_state == ConnectionState.CONNECTED:
                     try:
                         if hasattr(conn, 'check_connection'):
                             if not conn.check_connection():
+                                print(f"[ConnectionPool] Health check failed for {device_id}, marking as reconnecting")
                                 self.set_state(device_id, ConnectionState.RECONNECTING, "Health check failed")
                     except Exception as e:
-                        print(f"[ConnectionPool] Health check for {device_id} failed: {e}")
+                        print(f"[ConnectionPool] Health check error for {device_id}: {e}")
+                        self.set_state(device_id, ConnectionState.RECONNECTING, f"Health check exception: {e}")
+                elif current_state in (ConnectionState.DISCONNECTED, ConnectionState.ERROR):
+                    # 自动启动重连
+                    print(f"[ConnectionPool] Health check detected {device_id} in {current_state}, triggering reconnect")
+                    self.set_state(device_id, ConnectionState.RECONNECTING, "Health check triggered reconnect")
     
     def warm_up_connections(self, device_ids: List[str] = None):
         devices_to_warm = device_ids or list(self._connections.keys())
