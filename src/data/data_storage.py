@@ -4,11 +4,11 @@ import time
 import threading
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple, Callable
-from collections import OrderedDict
 from queue import Queue, Empty
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from src.utils.error_handling import get_error_handler, ErrorType
+from src.data.cache_manager import get_cache_manager
 
 
 @dataclass
@@ -20,39 +20,43 @@ class DataWriteTask:
 
 class DataStorage:
     MAX_BATCH_SIZE = 1000
-    CACHE_MAX_SIZE = 10000
-    CACHE_EXPIRE_SECONDS = 300
     
     def __init__(self):
         self.db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'database.db')
-        self._lock = threading.Lock()
+        self._write_lock = threading.Lock()
+        self._read_lock = threading.RLock()
         self._write_queue = Queue(maxsize=10000)
         self._write_thread = None
         self._write_running = False
-        self._cache = OrderedDict()
-        self._cache_lock = threading.Lock()
+        self._cache_manager = get_cache_manager()
         self._stats = {
             'inserts': 0,
             'updates': 0,
             'deletes': 0,
             'queries': 0,
-            'cache_hits': 0,
-            'cache_misses': 0,
             'batch_writes': 0,
             'async_writes': 0
         }
         self._stats_lock = threading.Lock()
     
-    def _get_conn(self):
-        conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
+    def _get_conn(self, readonly=False):
+        conn = sqlite3.connect(
+            self.db_path, 
+            check_same_thread=False, 
+            timeout=30.0,
+            isolation_level=None if readonly else 'DEFERRED'
+        )
         conn.execute('PRAGMA journal_mode=WAL;')
         conn.execute('PRAGMA synchronous=NORMAL;')
-        conn.execute('PRAGMA cache_size=10000;')
+        conn.execute('PRAGMA cache_size=-10000;')
+        conn.execute('PRAGMA temp_store=MEMORY;')
+        if readonly:
+            conn.execute('PRAGMA query_only=ON;')
         return conn
     
     def init(self):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -103,7 +107,7 @@ class DataStorage:
     
     def _process_write_tasks(self, tasks: List[DataWriteTask]):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -181,32 +185,19 @@ class DataStorage:
             self._stats[key] += delta
     
     def _get_cache_key(self, table_name: str, **kwargs) -> str:
-        parts = [table_name]
+        parts = ['datastorage', table_name]
         for k, v in sorted(kwargs.items()):
             parts.append(f'{k}={v}')
         return ':'.join(parts)
     
     def _get_from_cache(self, key: str) -> Optional[Any]:
-        with self._cache_lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                self._update_stats('cache_hits')
-                return self._cache[key]
-            self._update_stats('cache_misses')
-            return None
+        return self._cache_manager.get(key)
     
     def _add_to_cache(self, key: str, value: Any):
-        with self._cache_lock:
-            while len(self._cache) >= self.CACHE_MAX_SIZE:
-                self._cache.popitem(last=False)
-            self._cache[key] = value
-            self._cache.move_to_end(key)
+        self._cache_manager.set(key, value)
     
     def _invalidate_cache(self, table_name: str):
-        with self._cache_lock:
-            keys_to_remove = [k for k in self._cache.keys() if k.startswith(table_name + ':')]
-            for k in keys_to_remove:
-                del self._cache[k]
+        self._cache_manager.delete_pattern(f'datastorage:{table_name}:')
     
     def create_indexes(self, cursor):
         indexes = [
@@ -356,7 +347,7 @@ class DataStorage:
                 async_write = False
         
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -399,7 +390,7 @@ class DataStorage:
                 async_write = False
         
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -440,7 +431,7 @@ class DataStorage:
                 async_write = False
         
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -473,7 +464,7 @@ class DataStorage:
     
     def update_fault_record(self, fault_name: str, device_id: str, end_time: str, duration_seconds: float):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -502,8 +493,8 @@ class DataStorage:
             return cached
         
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     
@@ -539,8 +530,8 @@ class DataStorage:
         offset: int = 0
     ) -> List:
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     
@@ -603,8 +594,8 @@ class DataStorage:
         offset: int = 0
     ) -> List:
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     
@@ -654,8 +645,8 @@ class DataStorage:
     
     def get_faults_by_device(self, device_id: str) -> List:
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     sql = '''SELECT * FROM fault_records 
@@ -673,7 +664,7 @@ class DataStorage:
     
     def save_device(self, device_info: Dict[str, Any]):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -711,8 +702,8 @@ class DataStorage:
             return cached
         
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     cursor.execute('SELECT * FROM devices ORDER BY device_id')
@@ -729,8 +720,8 @@ class DataStorage:
     
     def get_device_ids(self) -> List[str]:
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     cursor.execute('SELECT DISTINCT device_id FROM devices WHERE enabled = 1')
@@ -746,7 +737,7 @@ class DataStorage:
     
     def delete_old_data(self, days: int = 30):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -782,7 +773,7 @@ class DataStorage:
     
     def delete_device_data(self, device_id: str):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()
@@ -816,8 +807,8 @@ class DataStorage:
     
     def get_record_count(self, table_name: str, device_id: str = None) -> int:
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     
@@ -842,8 +833,8 @@ class DataStorage:
             return cached
         
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     cursor.execute('''
@@ -878,8 +869,8 @@ class DataStorage:
     
     def get_device_anomaly_summary(self) -> List[Dict]:
         try:
-            with self._lock:
-                conn = self._get_conn()
+            with self._read_lock:
+                conn = self._get_conn(readonly=True)
                 try:
                     cursor = conn.cursor()
                     cursor.execute('''
@@ -911,10 +902,11 @@ class DataStorage:
             stats = self._stats.copy()
         
         stats['queue_size'] = self._write_queue.qsize()
-        stats['cache_size'] = len(self._cache)
+        cache_stats = self._cache_manager.get_stats()
+        stats.update({f'cache_{k}': v for k, v in cache_stats.items()})
         
-        with self._lock:
-            conn = self._get_conn()
+        with self._read_lock:
+            conn = self._get_conn(readonly=True)
             try:
                 cursor = conn.cursor()
                 
@@ -941,7 +933,7 @@ class DataStorage:
     
     def optimize_database(self):
         try:
-            with self._lock:
+            with self._write_lock:
                 conn = self._get_conn()
                 try:
                     cursor = conn.cursor()

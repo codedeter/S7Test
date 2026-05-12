@@ -27,6 +27,8 @@ class SocketIOHandler:
         self.device_manager.set_status_callback(self._on_device_status_change)
         
         self._init_sequences()
+        
+        self.start_sending_thread()
     
     def _init_sequences(self):
         for device_id in self.device_manager.devices:
@@ -308,19 +310,53 @@ class DataCollectionTask:
         
         def collection_loop():
             print("Data collection thread started...")
+            loop_count = 0
             while self._running:
                 try:
-                    all_device_data = self.device_manager.collect_all_data()
+                    loop_count += 1
+                    print(f"[DataCollection] Loop #{loop_count} starting...")
+                    
+                    # 添加超时保护
+                    import threading
+                    result = None
+                    error = None
+                    
+                    def collect_task():
+                        nonlocal result, error
+                        try:
+                            result = self.device_manager.collect_all_data()
+                        except Exception as e:
+                            error = e
+                    
+                    thread = threading.Thread(target=collect_task, daemon=True)
+                    thread.start()
+                    thread.join(timeout=30)  # 30秒超时
+                    
+                    if thread.is_alive():
+                        print("[DataCollection] WARNING: Data collection timed out after 30 seconds!")
+                        continue
+                    
+                    if error:
+                        print(f"[DataCollection] Error during collection: {error}")
+                        continue
+                    
+                    all_device_data = result
+                    print(f"[DataCollection] collect_all_data returned {len(all_device_data)} devices")
+                    
                     if all_device_data:
                         for device_data in all_device_data:
                             print(f"[{device_data.device_id}] Collected {len(device_data.data)} points, connected={device_data.connected}")
                         self.data_processor.process_device_data(all_device_data)
+                        print(f"[DataCollection] Processed data for {len(all_device_data)} devices")
+                    else:
+                        print("[DataCollection] No device data returned")
                     
                 except Exception as e:
                     print(f'Data collection error: {e}')
                     import traceback
                     traceback.print_exc()
                 
+                print(f"[DataCollection] Sleeping for {config.DATA_SAMPLING_INTERVAL}ms...")
                 time.sleep(config.DATA_SAMPLING_INTERVAL / 1000)
         
         self._collection_thread = threading.Thread(target=collection_loop, daemon=True)

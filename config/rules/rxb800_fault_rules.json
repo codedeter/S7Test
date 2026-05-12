@@ -1,0 +1,59 @@
+[
+    {
+        "rule_id": "rxb800_temp_high",
+        "name": "上油箱油温过高",
+        "description": "上油箱油温超过安全阈值时触发",
+        "device_types": ["RXB800"],
+        "conditions": [
+            {
+                "type": "analog",
+                "field": "上油箱油温",
+                "operator": ">",
+                "threshold_var": "油温上限阈值",
+                "debounce_ms": 5000,
+                "min_duration_ms": 3000
+            }
+        ],
+        "actions": [
+            {
+                "type": "alert",
+                "target": "dashboard",
+                "parameters": {"level": "critical", "message": "上油箱油温过高，请立即检查冷却系统"},
+                "severity": "critical"
+            },
+            {
+                "type": "log",
+                "target": "fault_log",
+                "parameters": {"log_level": "ERROR"},
+                "severity": "critical"
+            }
+        ],
+        "priority": 10,
+        "enabled": true
+    },
+    {
+        "rule_id": "rxb800_pressure_low",
+        "name": "系统压力过低",
+        "description": "系统压力低于正常范围",
+        "device_types": ["RXB800"],
+        "conditions": [
+            {
+                "type": "analog",
+                "field": "系统压力",
+                "operator": "<",
+                "value": 0.5,
+                "debounce_ms": 3000
+            }
+        ],
+        "actions": [
+            {
+                "type": "alert",
+                "target": "dashboard",
+                "parameters": {"level": "warning", "message": "系统压力过低，请检查泄漏"},
+                "severity": "warning"
+            }
+        ],
+        "priority": 20,
+        "enabled": true
+    }
+]

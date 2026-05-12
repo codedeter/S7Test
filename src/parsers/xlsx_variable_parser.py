@@ -89,6 +89,11 @@ class XLSXVariableParser:
             (re.compile(r'DB(\d+)\.DBB(\d+)'), 'DB_BYTE_NO_PERCENT'),
             (re.compile(r'DB(\d+)\.DBW(\d+)'), 'DB_WORD_NO_PERCENT'),
             (re.compile(r'DB(\d+)\.DBD(\d+)'), 'DB_DWORD_NO_PERCENT'),
+            (re.compile(r'DB(\d+)\.(\d+)\.(\d+)'), 'DB_BIT_SIMPLE'),
+            (re.compile(r'DB(\d+)\.(\d+)'), 'DB_WORD_SIMPLE'),
+            (re.compile(r'(\d+)\.(\d+)\.(\d+)'), 'DB_BIT_NUMERIC'),
+            (re.compile(r'(\d+)\.(\d+)'), 'DB_WORD_NUMERIC'),
+            (re.compile(r'DB(\d+)'), 'DB_ONLY'),
             (re.compile(r'%I(\d+)\.(\d+)'), 'INPUT_BIT'),
             (re.compile(r'%IB(\d+)'), 'INPUT_BYTE'),
             (re.compile(r'%IW(\d+)'), 'INPUT_WORD'),
@@ -301,17 +306,28 @@ class XLSXVariableParser:
         
         if pattern_type.startswith('DB'):
             result = {'area': 'DB', 'db': int(groups[0])}
-            if pattern_type in ('DB_BIT', 'DB_BIT_ALT', 'DB_BIT_NO_PERCENT'):
+            if pattern_type in ('DB_BIT', 'DB_BIT_ALT', 'DB_BIT_NO_PERCENT', 'DB_BIT_SIMPLE'):
                 result['offset'] = int(groups[1])
                 result['bit'] = int(groups[2])
             elif pattern_type in ('DB_BYTE', 'DB_BYTE_NO_PERCENT'):
                 result['offset'] = int(groups[1])
                 result['bit'] = 0
-            elif pattern_type in ('DB_WORD', 'DB_WORD_ALT', 'DB_WORD_NO_PERCENT'):
+            elif pattern_type in ('DB_WORD', 'DB_WORD_ALT', 'DB_WORD_NO_PERCENT', 'DB_WORD_SIMPLE'):
                 result['offset'] = int(groups[1])
                 result['bit'] = 0
             elif pattern_type in ('DB_DWORD', 'DB_DWORD_NO_PERCENT'):
                 result['offset'] = int(groups[1])
+                result['bit'] = 0
+            elif pattern_type == 'DB_BIT_NUMERIC':
+                result['db'] = int(groups[0])
+                result['offset'] = int(groups[1])
+                result['bit'] = int(groups[2])
+            elif pattern_type == 'DB_WORD_NUMERIC':
+                result['db'] = int(groups[0])
+                result['offset'] = int(groups[1])
+                result['bit'] = 0
+            elif pattern_type == 'DB_ONLY':
+                result['offset'] = 0
                 result['bit'] = 0
             return result
         

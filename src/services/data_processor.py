@@ -14,6 +14,7 @@ from src.analysis.fault_detector_base import FaultDetectorRegistry, create_detec
 from src.analysis.fault_reasoner import create_fault_reasoner, FaultReasoningEngine
 from src.analysis.io_fault_integrator import create_io_fault_integrator, IOFaultIntegrator
 from src.devices.device_manager import CollectedData
+from src.config.device_mapping import get_device_type
 
 
 class ProcessingResult:
@@ -382,18 +383,7 @@ class DataProcessor:
         Returns:
             设备类型字符串，如果无法确定返回None
         """
-        # 设备类型映射
-        device_type_map = {
-            'plc_002': 'RXB800',
-            'plc_rxa800': 'RXA800',
-            'plc_rxa630_1': 'RXA630',
-            'plc_rxa630_2': 'RXA630',
-            'plc_rxa630_3': 'RXA630',
-            'plc_001': 'RXA1300',
-            # 可以在这里添加更多设备类型映射
-        }
-        
-        return device_type_map.get(device_id)
+        return get_device_type(device_id)
     
     def _extract_fault_data(self, device_id: str, data: List[Dict[str, Any]], device_type: str) -> tuple:
         """

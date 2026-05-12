@@ -56,34 +56,47 @@ def init_devices(device_manager: DeviceManager):
 
 def start_background_connection(device_manager: DeviceManager):
     def connection_task():
-        print('[Background] ========================================')
-        print('[Background] Starting device connections...')
-        print(f'[Background] Devices to connect: {list(device_manager.devices.keys())}')
-        
-        # 立即启动健康检查，确保重连机制在后台运行
-        print('[Background] Starting connection health check early...')
-        device_manager._connection_pool.start_health_check()
+        print(f'[{time.strftime("%H:%M:%S")}] [Background] ========================================')
+        print(f'[{time.strftime("%H:%M:%S")}] [Background] Starting device connections...')
+        print(f'[{time.strftime("%H:%M:%S")}] [Background] Devices to connect: {list(device_manager.devices.keys())}')
         
         try:
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connecting to devices...')
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Device count: {len(device_manager.devices)}')
+            
+            start_time = time.time()
             results = device_manager.connect_all()
-            print(f'[Background] Connection results: {results}')
+            elapsed = time.time() - start_time
+            
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection results received after {elapsed:.2f}s')
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Results: {results}')
+            
+            success_count = sum(1 for success in results.values() if success)
+            total_count = len(results)
+            
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection summary: {success_count}/{total_count} devices connected')
             
             for device_id, success in results.items():
                 if success:
-                    print(f'[Background] ✓ {device_id} connected successfully')
+                    print(f'[{time.strftime("%H:%M:%S")}] [Background] OK {device_id} connected successfully')
                 else:
-                    print(f'[Background] ✗ {device_id} connection failed - will retry automatically')
-                    
+                    print(f'[{time.strftime("%H:%M:%S")}] [Background] FAIL {device_id} connection failed - will retry automatically')
+            
+            # 在连接完成后启动健康检查，确保重连机制在后台运行
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Starting connection health check...')
+            device_manager._connection_pool.start_health_check()
+            
         except Exception as e:
-            print(f'[Background] Connection error: {e}')
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection error: {e}')
             import traceback
             traceback.print_exc()
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Error type:', type(e).__name__)
             
-        print('[Background] ========================================')
+        print(f'[{time.strftime("%H:%M:%S")}] [Background] ========================================')
     
     thread = threading.Thread(target=connection_task, daemon=True)
     thread.start()
-    print('Background connection thread started')
+    print(f'[{time.strftime("%H:%M:%S")}] Background connection thread started')
 
 
 def register_shutdown_handlers(startup_manager, socketio_handler=None, collection_task=None):
@@ -147,16 +160,20 @@ def main():
         socketio_handler = SocketIOHandler(socketio, device_manager, data_processor)
         socketio_handler.register_events()
 
-        collection_task = DataCollectionTask(device_manager, data_processor)
-        collection_task.start()
-
-        socketio_handler.start_sending_thread()
-        startup_manager.complete_phase(StartupPhase.SERVICES_START, "Services started")
-
         startup_manager.start_phase(StartupPhase.BACKGROUND_CONNECT)
         print('\n[7/7] Starting background connections...')
         start_background_connection(device_manager)
+        
+        # 等待连接完成（给后台线程一些时间）
+        print('[Main] Waiting for initial connections...')
+        time.sleep(2)
+        
         startup_manager.complete_phase(StartupPhase.BACKGROUND_CONNECT, "Background connections started")
+        
+        # 在连接完成后启动数据采集任务
+        print('[Main] Starting data collection task after connection...')
+        collection_task = DataCollectionTask(device_manager, data_processor)
+        collection_task.start()
 
         startup_manager.finish_startup()
 

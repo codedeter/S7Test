@@ -1,7 +1,7 @@
 from .device_config import (
     DeviceType, ConnectionStatus,
     DBVariable, DataBlock, AreaVariable,
-    DeviceConfig, DeviceStatus,
+    DeviceConfig, DeviceStatus, NetworkInterface,
     create_device_config
 )
 from .device_manager import (
@@ -10,8 +10,9 @@ from .device_manager import (
 )
 from .connection_manager import (
     ConnectionPool, ConnectionState, ConnectionConfig,
-    ConnectionStats, create_connection_pool
+    ConnectionStats, NetworkQualityStats, create_connection_pool
 )
+from .network_monitor import NetworkMonitor, NetworkStatus, get_network_monitor
 
 __all__ = [
     'DeviceType',
@@ -21,6 +22,7 @@ __all__ = [
     'AreaVariable',
     'DeviceConfig',
     'DeviceStatus',
+    'NetworkInterface',
     'create_device_config',
     'DeviceManager',
     'DeviceCollector',
@@ -31,5 +33,9 @@ __all__ = [
     'ConnectionState',
     'ConnectionConfig',
     'ConnectionStats',
+    'NetworkQualityStats',
     'create_connection_pool',
+    'NetworkMonitor',
+    'NetworkStatus',
+    'get_network_monitor',
 ]

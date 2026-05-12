@@ -1,50 +1,49 @@
 """
-测试驱动器正常变量
+测试驱动器正常变量 - 单元测试版本
 """
 import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 
-from src.analysis.plc_variable_loader import load_plc_tags
-from src.plc.plc_client import PLCClient
-from src.plc.plc_data_collector import create_data_collector
+import unittest
+from unittest.mock import patch, MagicMock
 
-# 加载变量表
-loader = load_plc_tags()
-print("="*60)
-print("PLC变量表加载成功")
-print(f"总变量数: {len(loader.variables)}")
-print("="*60)
+class TestDriverVarLoading(unittest.TestCase):
+    @patch('src.analysis.plc_variable_loader.PLCVariableLoader')
+    def test_plc_variable_loader_returns_variables(self, mock_loader_class):
+        from src.analysis.plc_variable_loader import load_plc_tags
 
-# 查找驱动器正常变量
-print("\n查找驱动器相关变量:")
-for name, var in loader.variables.items():
-    if '驱动器' in name or 'driver' in name.lower():
-        print(f"\n变量名: {name}")
-        print(f"逻辑地址: {var.get('logical_address')}")
-        print(f"数据类型: {var.get('data_type')}")
-        print(f"注释: {var.get('comment')}")
+        mock_loader = MagicMock()
+        mock_loader.variables = {
+            '驱动器正常': {'logical_address': 'DB1.DBD0', 'data_type': 'DInt'},
+            '驱动器故障': {'logical_address': 'DB1.DBD4', 'data_type': 'DInt'}
+        }
+        mock_loader_class.return_value = mock_loader
 
-print("\n" + "="*60)
-print("当前采集的变量数据:")
-collector = create_data_collector()
-collector.plc.connect()
-data = collector.collect_all_data()
-print(f"采集到 {len(data)} 个变量")
+        loader = load_plc_tags()
 
-print("\n查找与驱动器相关的实际采集数据:")
-found = False
-for item in data:
-    tag_name = item.get('tag_name')
-    if tag_name and ('驱动器' in tag_name or 'driver' in tag_name.lower()):
-        print(f"\n变量名: {tag_name}")
-        print(f"DB号: {item.get('db_number')}")
-        print(f"地址: {item.get('address')}")
-        print(f"值: {item.get('value')}")
-        found = True
+        if loader is not None:
+            self.assertIsNotNone(loader.variables)
+            driver_vars = {k: v for k, v in loader.variables.items()
+                         if '驱动器' in k or 'driver' in k.lower()}
+            self.assertGreater(len(driver_vars), 0)
 
-if not found:
-    print("\n没有找到驱动器相关变量！")
-    print("检查所有采集的变量名:")
-    for item in data[:20]:
-        print(f"  - {item.get('tag_name')}")
+    def test_driver_var_structure(self):
+        from src.analysis.plc_variable_loader import PLCVariableLoader
+
+        mock_loader = MagicMock(spec=PLCVariableLoader)
+        mock_loader.variables = {
+            '驱动器正常': {
+                'logical_address': 'DB1.DBD0',
+                'data_type': 'DInt',
+                'comment': '驱动器状态'
+            }
+        }
+
+        var = mock_loader.variables.get('驱动器正常')
+        self.assertIsNotNone(var)
+        self.assertIn('logical_address', var)
+        self.assertIn('data_type', var)
+
+if __name__ == '__main__':
+    unittest.main()

@@ -15,6 +15,52 @@ class ConnectionState(Enum):
 
 
 @dataclass
+class NetworkQualityStats:
+    latency_samples: List[float] = field(default_factory=list)
+    max_latency_samples: int = 100
+    avg_latency_ms: float = 0.0
+    min_latency_ms: float = float('inf')
+    max_latency_ms: float = 0.0
+    network_switch_count: int = 0
+    successful_switches: int = 0
+    failed_switches: int = 0
+    current_ip: Optional[str] = None
+    last_switch_time: Optional[float] = None
+    
+    def record_latency(self, latency_ms: float):
+        self.latency_samples.append(latency_ms)
+        if len(self.latency_samples) > self.max_latency_samples:
+            self.latency_samples.pop(0)
+        
+        if self.latency_samples:
+            self.avg_latency_ms = sum(self.latency_samples) / len(self.latency_samples)
+            self.min_latency_ms = min(self.min_latency_ms, latency_ms)
+            self.max_latency_ms = max(self.max_latency_ms, latency_ms)
+    
+    def record_switch(self, success: bool, new_ip: str = None):
+        if success:
+            self.successful_switches += 1
+            self.current_ip = new_ip
+            self.last_switch_time = time.time()
+        else:
+            self.failed_switches += 1
+        self.network_switch_count += 1
+    
+    def get_latency_stats(self) -> Dict[str, float]:
+        return {
+            'avg_latency_ms': self.avg_latency_ms,
+            'min_latency_ms': self.min_latency_ms if self.min_latency_ms != float('inf') else 0.0,
+            'max_latency_ms': self.max_latency_ms,
+            'sample_count': len(self.latency_samples)
+        }
+    
+    def get_switch_rate(self) -> float:
+        if self.network_switch_count == 0:
+            return 0.0
+        return (self.successful_switches / self.network_switch_count) * 100
+
+
+@dataclass
 class ConnectionStats:
     total_connections: int = 0
     successful_connections: int = 0
@@ -28,6 +74,8 @@ class ConnectionStats:
     last_disconnection_time: Optional[float] = None
     total_disconnection_duration: float = 0.0
     current_disconnection_start: Optional[float] = None
+    
+    network_quality: NetworkQualityStats = field(default_factory=NetworkQualityStats)
     
     def record_connection_success(self):
         self.total_connections += 1
@@ -66,6 +114,12 @@ class ConnectionStats:
         if self.total_data_reads == 0:
             return 0.0
         return (self.successful_reads / self.total_data_reads) * 100
+    
+    def record_latency(self, latency_ms: float):
+        self.network_quality.record_latency(latency_ms)
+    
+    def record_network_switch(self, success: bool, new_ip: str = None):
+        self.network_quality.record_switch(success, new_ip)
 
 
 @dataclass

@@ -96,6 +96,11 @@ class Config:
     HEALTH_CHECK_ENABLED: bool = bool(int(os.environ.get('HEALTH_CHECK_ENABLED', '1')))
     HEALTH_CHECK_INTERVAL: int = int(os.environ.get('HEALTH_CHECK_INTERVAL', '30'))
     
+    # Network Switch Settings
+    NETWORK_SWITCH_TIMEOUT: int = int(os.environ.get('NETWORK_SWITCH_TIMEOUT', '5000'))
+    AUTO_DETECT_INTERFACES: bool = bool(int(os.environ.get('AUTO_DETECT_INTERFACES', '1')))
+    NETWORK_MONITOR_INTERVAL: int = int(os.environ.get('NETWORK_MONITOR_INTERVAL', '3000'))
+    
     # Simulation Mode Settings
     SIMULATION_MODE: bool = bool(int(os.environ.get('SIMULATION_MODE', '1')))  # 默认启用模拟模式
     SIMULATION_DATA_ENABLED: bool = bool(int(os.environ.get('SIMULATION_DATA_ENABLED', '1')))  # 启用模拟数据生成

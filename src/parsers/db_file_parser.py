@@ -59,6 +59,10 @@ class DBFileParser:
 
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
+        
+        # 移除BOM字符
+        if content.startswith('\ufeff'):
+            content = content[1:]
 
         return self.parse_content(content)
 
@@ -70,13 +74,16 @@ class DBFileParser:
         in_struct = False
         struct_name = None
         current_struct_name = None
+        struct_stack = []
 
-        db_number_pattern = re.compile(r'DATA_BLOCK\s+"(\w+)"', re.IGNORECASE)
+        db_number_pattern = re.compile(r'DATA_BLOCK\s*["\']([^"\']+)["\']', re.IGNORECASE)
         optimized_pattern = re.compile(r"S7_Optimized_Access\s*:=\s*'(\w+)'", re.IGNORECASE)
         struct_pattern = re.compile(r'(\w+)\s*:\s*Struct', re.IGNORECASE)
+        anonymous_struct_pattern = re.compile(r'^\s*STRUCT\s*$', re.IGNORECASE)
         end_struct_pattern = re.compile(r'END_STRUCT', re.IGNORECASE)
         var_pattern = re.compile(r'["\']?(\w+)["\']?\s*:\s*([A-Za-z0-9_]+)(?:\s*;\s*(.*))?', re.IGNORECASE)
         begin_pattern = re.compile(r'BEGIN', re.IGNORECASE)
+        end_data_block_pattern = re.compile(r'END_DATA_BLOCK', re.IGNORECASE)
 
         for line in lines:
             line = line.strip()
@@ -87,6 +94,7 @@ class DBFileParser:
                 db_num = self._extract_db_number(db_name)
                 self.current_db = ParsedDataBlock(db_number=db_num, name=db_name)
                 self._current_byte_offset = 0
+                struct_stack = []
                 continue
 
             opt_match = optimized_pattern.search(line)
@@ -98,16 +106,26 @@ class DBFileParser:
                 struct_name = struct_match.group(1)
                 in_struct = True
                 current_struct_name = struct_name
-                self._current_byte_offset = 0
+                struct_stack.append(struct_name)
+                continue
+
+            if anonymous_struct_pattern.match(line) and self.current_db:
+                in_struct = True
+                current_struct_name = None
+                struct_stack.append(None)
                 continue
 
             if end_struct_pattern.match(line):
-                in_struct = False
-                struct_name = None
-                self._current_byte_offset = 0
+                if struct_stack:
+                    struct_stack.pop()
+                    current_struct_name = struct_stack[-1] if struct_stack else None
+                in_struct = len(struct_stack) > 0
                 continue
 
             if begin_pattern.match(line):
+                continue
+
+            if end_data_block_pattern.match(line):
                 if self.current_db and self.current_db.variables:
                     self.data_blocks[self.current_db.db_number] = self.current_db
                 continue
@@ -131,15 +149,22 @@ class DBFileParser:
                 elif var_type == 'STRUCT':
                     pass
 
-        if self.current_db and self.current_db.variables:
-            self.data_blocks[self.current_db.db_number] = self.current_db
-
-        for db in self.data_blocks.values():
-            db.total_size = self._current_byte_offset
-
         return self.data_blocks
 
     def _extract_db_number(self, db_name: str) -> int:
+        # 数据块名称到DB编号的映射
+        name_to_db = {
+            'GLABAL': 1,
+            '显示值': 10,
+            '故障报警': 51,
+            'GLOBAL': 1,
+            'GLOBALDATA': 1,
+        }
+        
+        # 首先检查名称映射
+        if db_name.upper() in name_to_db:
+            return name_to_db[db_name.upper()]
+        
         patterns = [
             (r'DB(\d+)', lambda m: int(m.group(1))),
             (r'GLABAL', lambda m: 1),

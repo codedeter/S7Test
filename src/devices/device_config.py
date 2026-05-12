@@ -48,6 +48,19 @@ class AreaVariable:
 
 
 @dataclass
+class NetworkInterface:
+    name: str
+    ip_address: str
+    subnet_mask: str = ""
+    gateway: str = ""
+    priority: int = 10
+    enabled: bool = True
+
+    def __repr__(self) -> str:
+        return f"NetworkInterface(name={self.name}, ip={self.ip_address}, priority={self.priority})"
+
+
+@dataclass
 class DeviceConfig:
     device_id: str
     device_name: str
@@ -65,10 +78,37 @@ class DeviceConfig:
     q_variables: List[AreaVariable] = field(default_factory=list)
     enabled: bool = True
     description: str = ""
+    
+    ip_addresses: List[str] = field(default_factory=list)
+    network_interfaces: List[NetworkInterface] = field(default_factory=list)
+    auto_detect_interfaces: bool = False
+    network_switch_timeout: int = 5000
+    preferred_interface: Optional[str] = None
 
     @property
     def connection_string(self) -> str:
         return f"{self.ip_address}:{self.rack}/{self.slot}"
+    
+    @property
+    def all_ip_addresses(self) -> List[str]:
+        ips = [self.ip_address] if self.ip_address else []
+        ips.extend(self.ip_addresses)
+        for iface in self.network_interfaces:
+            if iface.enabled and iface.ip_address not in ips:
+                ips.append(iface.ip_address)
+        return ips
+    
+    def get_preferred_ips(self) -> List[str]:
+        if self.preferred_interface:
+            for iface in self.network_interfaces:
+                if iface.name == self.preferred_interface and iface.enabled:
+                    return [iface.ip_address] + [ip for ip in self.all_ip_addresses if ip != iface.ip_address]
+        sorted_interfaces = sorted(self.network_interfaces, key=lambda x: x.priority)
+        ips = [iface.ip_address for iface in sorted_interfaces if iface.enabled]
+        if self.ip_address and self.ip_address not in ips:
+            ips.insert(0, self.ip_address)
+        ips.extend([ip for ip in self.ip_addresses if ip not in ips])
+        return ips
 
 
 @dataclass

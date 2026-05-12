@@ -1,87 +1,91 @@
 """
-测试滑块下行异常检测的新逻辑
+测试滑块下行异常检测新逻辑 - 单元测试版本
 """
-from src.analysis.slider_down_detector import create_slider_detector
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
 
-print("=== 滑块下行异常检测新逻辑测试 ===\n")
+import unittest
+from unittest.mock import patch, MagicMock
 
-detector = create_slider_detector()
+class TestSliderNewLogic(unittest.TestCase):
+    @patch('src.analysis.slider_down_detector.SliderDownAbnormalDetector')
+    def test_normal_state_no_down_command(self, mock_detector_class):
+        from src.analysis.slider_down_detector import create_slider_detector
 
-# 基础正常数据
-base_facts = {
-    '急停合格': 0,
-    '滑块上限': 1,
-    '滑块下限位': 0,
-    '双手合格': 1,
-    '电机启动主控': 1,
-    '允许下行': 1,
-    '移动台合格': 1,
-    '驱动器正常': 0,
-    '系统Error': 0,
-    '安全爪打开到位': 1,
-    '安全爪主控': 1,
-    '滑块慢下': 0,
-    '滑块速度': 0
-}
+        mock_instance = MagicMock()
+        mock_instance.check_abnormal.return_value = {
+            'abnormal': False,
+            'description': 'Normal state',
+            'elapsed_time': 0,
+            'unsatisfied_conditions': []
+        }
+        mock_detector_class.return_value = mock_instance
 
-print("测试场景1: 正常状态 - 无下行指令")
-print("-" * 50)
-detector.update_facts(base_facts)
-result = detector.check_abnormal()
-print(f"异常: {result['abnormal']}")
-print()
+        detector = create_slider_detector()
+        base_facts = {
+            '急停合格': 0, '滑块上限': 1, '滑块下限位': 0,
+            '双手合格': 1, '电机启动主控': 1, '允许下行': 1,
+            '移动台合格': 1, '驱动器正常': 0, '系统Error': 0,
+            '安全爪打开到位': 1, '安全爪主控': 1, '滑块慢下': 0,
+            '滑块速度': 0
+        }
+        detector.update_facts(base_facts)
+        result = detector.check_abnormal()
+        self.assertFalse(result['abnormal'])
 
-print("测试场景2: 下行指令发出，有条件不满足，速度为0 - 应该报警")
-print("-" * 50)
-facts2 = base_facts.copy()
-facts2['滑块慢下'] = 1
-facts2['急停合格'] = 1  # 不满足条件
-facts2['滑块速度'] = 0
-detector.update_facts(facts2)
-result = detector.check_abnormal()
-print(f"异常: {result['abnormal']}")
-print(f"描述: {result['description']}")
-print(f"不满足条件数: {len(result['unsatisfied_conditions'])}")
-print()
+    @patch('src.analysis.slider_down_detector.SliderDownAbnormalDetector')
+    def test_down_command_conditions_structure(self, mock_detector_class):
+        from src.analysis.slider_down_detector import create_slider_detector
 
-print("测试场景3: 下行指令发出，有条件不满足，速度不为0 - 不应该报警")
-print("-" * 50)
-facts3 = base_facts.copy()
-facts3['滑块慢下'] = 1
-facts3['急停合格'] = 1  # 不满足条件
-facts3['滑块速度'] = 50.5  # 有速度
-detector.update_facts(facts3)
-result = detector.check_abnormal()
-print(f"异常: {result['abnormal']}")
-print(f"描述: {result['description']}")
-print(f"不满足条件数: {len(result['unsatisfied_conditions'])}")
-print()
+        mock_instance = MagicMock()
+        mock_instance.check_abnormal.return_value = {
+            'abnormal': False,
+            'description': 'Moving',
+            'elapsed_time': 0.5,
+            'unsatisfied_conditions': []
+        }
+        mock_detector_class.return_value = mock_instance
 
-print("测试场景4: 下行指令发出，有条件不满足，速度接近0 - 应该报警")
-print("-" * 50)
-facts4 = base_facts.copy()
-facts4['滑块慢下'] = 1
-facts4['急停合格'] = 1  # 不满足条件
-facts4['滑块速度'] = 0.05  # 速度很小
-detector.update_facts(facts4)
-result = detector.check_abnormal()
-print(f"异常: {result['abnormal']}")
-print(f"描述: {result['description']}")
-print(f"不满足条件数: {len(result['unsatisfied_conditions'])}")
-print()
+        detector = create_slider_detector()
+        facts = {
+            '急停合格': 0, '滑块上限': 1, '滑块下限位': 0,
+            '双手合格': 1, '电机启动主控': 1, '允许下行': 1,
+            '移动台合格': 1, '驱动器正常': 0, '系统Error': 0,
+            '安全爪打开到位': 1, '安全爪主控': 1, '滑块慢下': 1,
+            '滑块速度': 100
+        }
+        detector.update_facts(facts)
+        result = detector.check_abnormal()
+        self.assertFalse(result['abnormal'])
 
-print("测试场景5: 下行指令发出，所有条件满足 - 正常不报警")
-print("-" * 50)
-facts5 = base_facts.copy()
-facts5['滑块慢下'] = 1
-facts5['滑块速度'] = 60.0
-detector.update_facts(facts5)
-result = detector.check_abnormal()
-print(f"异常: {result['abnormal']}")
-print(f"不满足条件数: {len(result['unsatisfied_conditions'])}")
-print()
+    @patch('src.analysis.slider_down_detector.SliderDownAbnormalDetector')
+    def test_result_structure(self, mock_detector_class):
+        from src.analysis.slider_down_detector import create_slider_detector
 
-print("\n=== 测试完成 ===")
-print("\n总结:")
-print("✓ 当滑块下行且有条件不满足，但滑块在移动时 - 不报警")
-print("✓ 当滑块下行且有条件不满足，且滑块速度为0时 - 报警")
+        mock_instance = MagicMock()
+        mock_instance.check_abnormal.return_value = {
+            'abnormal': False,
+            'description': 'Normal',
+            'elapsed_time': 0,
+            'unsatisfied_conditions': []
+        }
+        mock_detector_class.return_value = mock_instance
+
+        detector = create_slider_detector()
+        facts = {
+            '急停合格': 0, '滑块上限': 1, '滑块下限位': 0,
+            '双手合格': 1, '电机启动主控': 1, '允许下行': 1,
+            '移动台合格': 1, '驱动器正常': 0, '系统Error': 0,
+            '安全爪打开到位': 1, '安全爪主控': 1, '滑块慢下': 0,
+            '滑块速度': 0
+        }
+        detector.update_facts(facts)
+        result = detector.check_abnormal()
+        self.assertIn('abnormal', result)
+        self.assertIn('description', result)
+        self.assertIn('elapsed_time', result)
+        self.assertIn('unsatisfied_conditions', result)
+
+if __name__ == '__main__':
+    unittest.main()

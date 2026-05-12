@@ -1,0 +1,166 @@
+﻿DATA_BLOCK "故障报警"
+TITLE = 故障报警
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+   STRUCT 
+      上油箱油温过低 : Bool;
+      上油箱油需冷却 : Bool;
+      上油箱油温过高 : Bool;
+      上油箱滤油受阻 : Bool;
+      上油箱油空 : Bool;
+      上油箱需补油 : Bool;
+      控制油路滤油堵塞 : Bool;
+      辅助油路滤油堵塞 : Bool;
+      流量阀滤油堵塞 : Bool;
+      伺服阀滤油堵塞 : Bool;
+      "3Y4滤油受阻" : Bool;
+      润滑液位低故障 : Bool;
+      操作站急停不合格 : Bool;
+      左前立柱急停不合格 : Bool;
+      右后立柱急停不合格 : Bool;
+      左后立柱急停不合格 : Bool;
+      右前立柱急停不合格 : Bool;
+      前按钮站急停不合格 : Bool;
+      后按钮站急停不合格 : Bool;
+      左光幕不合格 : Bool;
+      右光幕不合格 : Bool;
+      位移偏差不合格 : Bool;
+      滑块处于上极限 : Bool;
+      滑块处于下极限 : Bool;
+      操作台静止按下 : Bool;
+      前台静止按下 : Bool;
+      后台静止按下 : Bool;
+      操作站静止按下 : Bool;
+      "5Q1电源未接通" : Bool;
+      提升夹紧截止阀未打开到位 : Bool;
+      充液截止阀1位打开到位 : Bool;
+      充液截止阀2位打开到位 : Bool;
+      充液截止阀3位打开到位 : Bool;
+      上模夹紧泵站液位低 : Bool;
+      PLC网络故障 : Bool;
+      动力柜网络故障 : Bool;
+      操作站网络故障 : Bool;
+      底梁网络故障 : Bool;
+      上梁网络故障 : Bool;
+      下油箱网络故障 : Bool;
+      滑块网络故障 : Bool;
+      滑块左位移传感器网络故障 : Bool;
+      滑块右位移传感器网络故障 : Bool;
+      左G120网络故障 : Bool;
+      右G120网络故障 : Bool;
+      PAC1网络故障 : Bool;
+      安全梯发讯 : Bool;
+      左移动台变频器故障 : Bool;
+      右移动台变频器故障 : Bool;
+      上模1流量低 : Bool;
+      上模2流量低 : Bool;
+      上模3流量低 : Bool;
+      上模4流量低 : Bool;
+      上模1冷却水温度高 : Bool;
+      上模2冷却水温度高 : Bool;
+      上模3冷却水温度高 : Bool;
+      上模4冷却水温度高 : Bool;
+      下模1流量低 : Bool;
+      下模2流量低 : Bool;
+      下模3流量低 : Bool;
+      下模4流量低 : Bool;
+      下模1冷却水温度高 : Bool;
+      下模2冷却水温度高 : Bool;
+      下模3冷却水温度高 : Bool;
+      下模4冷却水温度高 : Bool;
+      下油箱需冷却 : Bool;
+      下油箱油温过低 : Bool;
+      下油箱油温过高 : Bool;
+      下油箱滤油受阻 : Bool;
+      下油箱油空 : Bool;
+      下油箱需补油 : Bool;
+      右前探头触发1 : Bool;
+      右前探头触发2 : Bool;
+      右前探头触发3 : Bool;
+      右前探头触发4 : Bool;
+      右前探头触发5 : Bool;
+      右前探头触发6 : Bool;
+      右前探头触发7 : Bool;
+      右前探头触发8 : Bool;
+      右后按钮需更换 : Bool;
+      左前按钮需更换 : Bool;
+      右前按钮需更换 : Bool;
+      左后按钮需更换 : Bool;
+      右后探头触发3 : Bool;
+      右后探头触发4 : Bool;
+      右后探头触发5 : Bool;
+      右后探头触发6 : Bool;
+      右后探头触发7 : Bool;
+      右后探头触发8 : Bool;
+      右后探头触发9 : Bool;
+      右后探头触发10 : Bool;
+      "2M1伺服故障报警" : Bool;
+      "2M2伺服故障报警" : Bool;
+      "2M3伺服故障报警" : Bool;
+      "2M4伺服故障报警" : Bool;
+      滑块下滑报警 : Bool;
+      左前按钮1需更换 : Bool;
+      左前按钮2需更换 : Bool;
+      左后按钮1需更换 : Bool;
+      左后按钮2需更换 : Bool;
+      右前按钮1需更换 : Bool;
+      右前按钮2需更换 : Bool;
+      右后按钮1需更换 : Bool;
+      右后按钮2需更换 : Bool;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK "显示值"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      模拟量采集 : Struct
+         "2M1实时电机速度" : Real;
+         "2M2实时电机速度" : Real;
+         "2M3实时电机速度" : Real;
+         "2M4实时电机速度" : Real;
+         液压垫位移传感器 : Real;
+         压力传感器3S201 : Real;
+         压力传感器3S202 : Real;
+         油温传感器 : Real;
+         压力传感器3S203 : Real;
+         水温传感器 : Real;
+         流量传感器 : Real;
+         垫压力传感器4B201 : Real;
+         垫压力传感器4B202 : Real;
+         移动台提升压力Mpa : Real;
+         移动台压力传感器 : Real;
+         "4B201压力显示T" : Real;
+         "4B202压力显示T" : Real;
+      END_STRUCT;
+      HMI显示 : Struct
+         滑块实际位移 : Real;
+         滑块中间缸压力T : Real;
+         滑块侧缸压力T : Real;
+         滑块总压力T : Real;
+         压力T_MAX : Real;
+         压力Mpa_MAX : Real;
+         滑块速度 : Real;
+         垫压力 : Real;
+         保压时间 : Int;
+         左台变频器转速 : Real;
+         右台变频器转速 : Real;
+         顶出时间 : Int;
+         "3Y10压力反馈" : Real;
+      END_STRUCT;
+      气阀顶出时间 : Struct
+         左气阀顶出时间 : Int;
+         右气阀顶出时间 : Int;
+      END_STRUCT;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+

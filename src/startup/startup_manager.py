@@ -37,6 +37,7 @@ class PhaseResult:
 @dataclass
 class StartupContext:
     phase_results: Dict[StartupPhase, PhaseResult] = field(default_factory=dict)
+    phase_start_times: Dict[StartupPhase, float] = field(default_factory=dict)
     current_phase: StartupPhase = StartupPhase.INITIALIZING
     start_time: float = 0.0
     end_time: float = 0.0
@@ -45,6 +46,7 @@ class StartupContext:
     
     def mark_phase_start(self, phase: StartupPhase):
         self.current_phase = phase
+        self.phase_start_times[phase] = time.time() * 1000
         self.phase_results[phase] = PhaseResult(
             status=StartupStatus.IN_PROGRESS,
             message="Phase started"
@@ -52,28 +54,25 @@ class StartupContext:
     
     def mark_phase_complete(self, phase: StartupPhase, message: str = ""):
         if phase in self.phase_results:
-            duration = (time.time() * 1000) - self._get_phase_start_time(phase)
+            duration = (time.time() * 1000) - self.phase_start_times.get(phase, time.time() * 1000)
             self.phase_results[phase] = PhaseResult(
                 status=StartupStatus.COMPLETED,
                 message=message or "Phase completed",
-                duration_ms=duration
+                duration_ms=max(0, duration)
             )
     
     def mark_phase_failed(self, phase: StartupPhase, error: Exception):
-        duration = (time.time() * 1000) - self._get_phase_start_time(phase)
+        duration = (time.time() * 1000) - self.phase_start_times.get(phase, time.time() * 1000)
         self.phase_results[phase] = PhaseResult(
             status=StartupStatus.FAILED,
             message=str(error),
             error=error,
-            duration_ms=duration
+            duration_ms=max(0, duration)
         )
         self.current_phase = phase
         self.overall_status = StartupStatus.FAILED
         self.error_message = str(error)
-    
-    def _get_phase_start_time(self, phase: StartupPhase) -> float:
-        return self.start_time if phase == StartupPhase.INITIALIZING else time.time() * 1000
-    
+
     def is_complete(self) -> bool:
         return self.current_phase == StartupPhase.RUNNING
     
