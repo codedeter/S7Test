@@ -12,6 +12,7 @@ import time
 
 from config.config import config
 from config.devices_config import create_device_configs
+from config.device_loader import create_device_loader
 from src.devices import DeviceManager, create_device_manager
 from src.api.routes import register_routes
 from src.services.data_processor import DataProcessor
@@ -48,10 +49,27 @@ def create_app():
 
 
 def init_devices(device_manager: DeviceManager):
-    device_configs = create_device_configs()
-    for device_config in device_configs:
-        device_manager.add_device(device_config)
-    return len(device_configs)
+    # 首先尝试从配置文件加载设备
+    device_loader = create_device_loader()
+    device_configs = device_loader.load_all()
+    
+    loaded_count = 0
+    
+    # 如果配置文件中有设备，使用配置文件
+    if device_configs:
+        print(f'[init_devices] Loaded {len(device_configs)} device(s) from config files')
+        for device_config in device_configs:
+            device_manager.add_device(device_config)
+        loaded_count = len(device_configs)
+    else:
+        # 如果没有配置文件，回退到硬编码默认配置
+        print('[init_devices] No config files found, using default device_config defaults')
+        default_configs = create_device_configs()
+        for device_config in default_configs:
+            device_manager.add_device(device_config)
+        loaded_count = len(default_configs)
+    
+    return loaded_count
 
 
 def start_background_connection(device_manager: DeviceManager):
