@@ -17,7 +17,6 @@ from src.devices import DeviceManager, create_device_manager
 from src.api.routes import register_routes
 from src.services.data_processor import DataProcessor
 from src.socketio_handler.events import SocketIOHandler
-from src.socketio_handler.optimized_handler import create_optimized_socketio_handler
 from src.services.optimized_collector import create_optimized_collector
 from src.startup import get_startup_manager, StartupPhase
 

@@ -28,5 +28,15 @@ python-dotenv==1.0.0
 eventlet==0.33.3
 gevent==23.9.1
 
+# Structured logging
+structlog==24.1.0
+
+# API Security
+PyJWT==2.8.0
+cryptography==42.0.5
+
+# System monitoring
+psutil==5.9.8
+
 # XLSX file parsing (for IO variable table)
 openpyxl==3.1.2

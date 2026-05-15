@@ -68,6 +68,25 @@ class DataProcessor:
         self._device_data_cache = {}
         self._cache_valid_duration = 0.5
     
+    def add_to_buffer(self, collected_data):
+        """从外部添加数据到缓冲区"""
+        current_time = time.time()
+        device_id = collected_data.get('device_id')
+        device_name = collected_data.get('device_name', device_id)
+        data = collected_data.get('data', [])
+        
+        with self.buffer_lock:
+            self.data_buffer.append({
+                'timestamp': current_time * 1000,
+                'device_id': device_id,
+                'device_name': device_name,
+                'data': data
+            })
+        
+        # 同时更新缓存
+        if device_id and data:
+            self._update_cache(device_id, data, current_time)
+    
     def _init_fault_detectors(self):
         """
         初始化故障检测器
