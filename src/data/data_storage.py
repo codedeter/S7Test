@@ -201,6 +201,7 @@ class DataStorage:
     
     def create_indexes(self, cursor):
         indexes = [
+            # 基础索引
             ('idx_plc_data_device_id', 'plc_data(device_id)'),
             ('idx_plc_data_timestamp', 'plc_data(timestamp)'),
             ('idx_plc_data_device_timestamp', 'plc_data(device_id, timestamp)'),
@@ -212,7 +213,29 @@ class DataStorage:
             ('idx_fault_records_device', 'fault_records(device_id)'),
             ('idx_fault_records_resolved', 'fault_records(resolved)'),
             ('idx_fault_records_device_resolved', 'fault_records(device_id, resolved)'),
-            ('idx_devices_device_id', 'devices(device_id)')
+            ('idx_devices_device_id', 'devices(device_id)'),
+            
+            # === 2026-05-12 优化新增索引 ===
+            # 针对时序查询优化的复合索引 (设备+数据块+时间倒序)
+            ('idx_plc_data_time_series', 'plc_data(device_id, db_number, timestamp DESC)'),
+            
+            # 针对设备内连续地址查询的索引
+            ('idx_plc_data_device_db_addr', 'plc_data(device_id, db_number, address)'),
+            
+            # 针对故障分析的复合索引 (设备+严重程度+时间)
+            ('idx_fault_time_window', 'fault_records(device_id, severity, start_time DESC)'),
+            
+            # 针对故障设备+状态+持续时间的查询
+            ('idx_fault_active', 'fault_records(device_id, resolved, duration_seconds DESC)'),
+            
+            # 针对异常分析的多维查询索引
+            ('idx_anomalies_analysis', 'anomalies(device_id, db_number, address, timestamp DESC)'),
+            
+            # 针对特定设备最近数据的查询
+            ('idx_plc_data_recent', 'plc_data(device_id, timestamp DESC)'),
+            
+            # 针对特定设备特定DB块的时间查询
+            ('idx_plc_data_device_db_time', 'plc_data(device_id, db_number, timestamp DESC)'),
         ]
         
         for idx_name, idx_def in indexes:
