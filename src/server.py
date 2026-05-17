@@ -1,28 +1,21 @@
 import sys
 import os
 import io
-import signal
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from flask import Flask, make_response
-from flask_socketio import SocketIO
 import threading
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from flask import Flask, make_response, jsonify, request
+from flask_socketio import SocketIO
+
 from config.config import config
-from config.devices_config import create_device_configs
-from config.device_loader import create_device_loader
 from src.devices import DeviceManager, create_device_manager
 from src.api.routes import register_routes
 from src.services.data_processor import DataProcessor
 from src.socketio_handler.events import SocketIOHandler
-from src.socketio_handler.optimized_handler import create_optimized_socketio_handler
 from src.services.optimized_collector import create_optimized_collector
-from src.startup import get_startup_manager, StartupPhase
-
-original_stderr = sys.stderr
-
+from src.startup.startup_manager import get_startup_manager, StartupPhase
 
 def create_app():
     app = Flask(__name__, static_folder='../public', template_folder='../public')
@@ -33,8 +26,16 @@ def create_app():
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '-1'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         return response
     
+    @app.route('/api/test', methods=['GET'])
+    def test_api():
+        print('[DEBUG] /api/test called')
+        return jsonify({'status': 'ok', 'message': 'Test API works!'})
+
     @app.route('/')
     def index():
         html_path = os.path.join(os.path.dirname(__file__), '..', 'public', 'index.html')
@@ -49,194 +50,239 @@ def create_app():
     
     return app
 
-
-def init_devices(device_manager: DeviceManager):
-    # 首先尝试从配置文件加载设备
-    device_loader = create_device_loader()
-    device_configs = device_loader.load_all()
+def graceful_shutdown(socketio_handler, optimized_collector, device_manager, data_processor, startup_manager):
+    """
+    优雅地关闭所有服务器组件
     
-    loaded_count = 0
+    Args:
+        socketio_handler: SocketIO处理?        optimized_collector: 数据采集?        device_manager: 设备管理?        data_processor: 数据处理?        startup_manager: 启动管理?    """
+    print('\n' + '=' * 50)
+    print('[Shutdown] Initiating graceful shutdown...')
+    print('=' * 50)
     
-    # 如果配置文件中有设备，使用配置文件
-    if device_configs:
-        print(f'[init_devices] Loaded {len(device_configs)} device(s) from config files')
-        for device_config in device_configs:
-            device_manager.add_device(device_config)
-        loaded_count = len(device_configs)
-    else:
-        # 如果没有配置文件，回退到硬编码默认配置
-        print('[init_devices] No config files found, using default device_config defaults')
-        default_configs = create_device_configs()
-        for device_config in default_configs:
-            device_manager.add_device(device_config)
-        loaded_count = len(default_configs)
-    
-    return loaded_count
-
-
-def start_background_connection(device_manager: DeviceManager):
-    def connection_task():
-        print(f'[{time.strftime("%H:%M:%S")}] [Background] ========================================')
-        print(f'[{time.strftime("%H:%M:%S")}] [Background] Starting device connections...')
-        print(f'[{time.strftime("%H:%M:%S")}] [Background] Devices to connect: {list(device_manager.devices.keys())}')
+    try:
+        if 1:
+            print('\n[Shutdown 1/6] Stopping data collector...')
+            if optimized_collector:
+                try:
+                    optimized_collector.stop()
+                    print('[Shutdown] ?Data collector stopped')
+                except Exception as e:
+                    print(f'[Shutdown] ?Error stopping data collector: {e}')
         
-        try:
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connecting to devices...')
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Device count: {len(device_manager.devices)}')
-            
-            start_time = time.time()
-            results = device_manager.connect_all()
-            elapsed = time.time() - start_time
-            
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection results received after {elapsed:.2f}s')
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Results: {results}')
-            
-            success_count = sum(1 for success in results.values() if success)
-            total_count = len(results)
-            
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection summary: {success_count}/{total_count} devices connected')
-            
-            for device_id, success in results.items():
-                if success:
-                    print(f'[{time.strftime("%H:%M:%S")}] [Background] OK {device_id} connected successfully')
-                else:
-                    print(f'[{time.strftime("%H:%M:%S")}] [Background] FAIL {device_id} connection failed - will retry automatically')
-            
-            # 在连接完成后启动健康检查，确保重连机制在后台运行
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Starting connection health check...')
-            device_manager._connection_pool.start_health_check()
-            
-        except Exception as e:
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection error: {e}')
-            import traceback
-            traceback.print_exc()
-            print(f'[{time.strftime("%H:%M:%S")}] [Background] Error type:', type(e).__name__)
-            
-        print(f'[{time.strftime("%H:%M:%S")}] [Background] ========================================')
-    
-    thread = threading.Thread(target=connection_task, daemon=True)
-    thread.start()
-    print(f'[{time.strftime("%H:%M:%S")}] Background connection thread started')
-
-
-def register_shutdown_handlers(startup_manager, socketio_handler=None, collector=None):
-    def shutdown_handler(signum, frame):
-        print(f"\nReceived shutdown signal ({signum})")
-        startup_manager.shutdown()
+        if 1:
+            print('\n[Shutdown 2/6] Stopping SocketIO data sender...')
+            if socketio_handler:
+                try:
+                    socketio_handler.stop_sending_thread()
+                    print('[Shutdown] ?SocketIO sender stopped')
+                except Exception as e:
+                    print(f'[Shutdown] ?Error stopping SocketIO sender: {e}')
         
-        if socketio_handler:
-            socketio_handler.stop_sending_thread()
-        if collector:
-            collector.stop()
+        if 1:
+            print('\n[Shutdown 3/6] Stopping device connections...')
+            if device_manager:
+                try:
+                    device_manager.stop_collection()
+                    print('[Shutdown] ?Device collection stopped')
+                except Exception as e:
+                    print(f'[Shutdown] ?Error stopping device collection: {e}')
         
-        time.sleep(1)
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-
+        if 1:
+            print('\n[Shutdown 4/6] Disconnecting PLC devices...')
+            if device_manager:
+                try:
+                    device_manager.disconnect_all()
+                    print('[Shutdown] ?PLC devices disconnected')
+                except Exception as e:
+                    print(f'[Shutdown] ?Error disconnecting PLCs: {e}')
+        
+        if 1:
+            print('\n[Shutdown 5/6] Stopping network monitor...')
+            if device_manager:
+                try:
+                    device_manager.stop_network_monitor()
+                    print('[Shutdown] ?Network monitor stopped')
+                except Exception as e:
+                    print(f'[Shutdown] ?Error stopping network monitor: {e}')
+        
+        if 1:
+            print('\n[Shutdown 6/6] Cleaning up data processor...')
+            if data_processor:
+                try:
+                    data_processor.shutdown()
+                    print('[Shutdown] ?Data processor shutdown')
+                except Exception as e:
+                    print(f'[Shutdown] ?Error shutting down data processor: {e}')
+        
+        if startup_manager:
+            print('\n[Shutdown] Notifying shutdown callbacks...')
+            try:
+                startup_manager.shutdown()
+                print('[Shutdown] ?Startup manager shutdown complete')
+            except Exception as e:
+                print(f'[Shutdown] ?Error in startup manager shutdown: {e}')
+        
+        print('\n' + '=' * 50)
+        print('[Shutdown] ?All components stopped successfully!')
+        print('=' * 50)
+        
+    except Exception as e:
+        print(f'\n[Shutdown] Error during shutdown: {e}')
+        import traceback
+        traceback.print_exc()
 
 def main():
+    print('=' * 50)
+    print('PLC Data Monitor System v3.2 - Optimized')
+    print('=' * 50)
+    
     startup_manager = get_startup_manager()
     startup_manager.begin_startup()
     
-    socketio_handler = None
-    optimized_collector = None
+    print('\n[1/8] Creating Flask app...')
+    app = create_app()
+    startup_manager.start_phase(StartupPhase.FLASK_APP_CREATE)
+    
+    print('\n[2/8] Creating SocketIO...')
+    socketio = SocketIO(app, 
+                        cors_allowed_origins="*", 
+                        async_mode='threading',
+                        ping_interval=10000,
+                        ping_timeout=30000,
+                        transports=['polling'],
+                        allow_upgrades=False,
+                        cookie=False)
+    print('[SocketIO] Configuration: polling only, CORS enabled')
+    
+    print('\n[3/8] Initializing database...')
+    data_processor = DataProcessor()
+    data_processor.data_storage.init()
+    startup_manager.start_phase(StartupPhase.DATABASE_INIT)
+    
+    print('\n[4/8] Creating device manager...')
+    device_manager = create_device_manager()
+    startup_manager.start_phase(StartupPhase.DEVICE_MANAGER_CREATE)
+    
+    from config.device_loader import create_device_loader
+    device_loader = create_device_loader()
+    device_configs = device_loader.load_all()
+    for device_config in device_configs:
+        device_manager.add_device(device_config)
+    print(f'      Loaded {len(device_configs)} device(s)')
+    startup_manager.start_phase(StartupPhase.DEVICES_INIT)
+    
+    print('\n[5/8] Registering routes and handlers...')
+    register_routes(app, device_manager)
+    
+    socketio_handler = SocketIOHandler(socketio, device_manager, data_processor)
+    socketio_handler.register_events()
+    socketio_handler.start_sending_thread()
+    startup_manager.start_phase(StartupPhase.ROUTES_REGISTER)
+    
+    def background_connection_task():
+        print(f'[{time.strftime("%H:%M:%S")}] [Background] Starting device connections...')
+        try:
+            results = device_manager.connect_all()
+            success_count = sum(1 for success in results.values() if success)
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection summary: {success_count}/{len(results)} devices connected')
+            device_manager._connection_pool.start_health_check()
+        except Exception as e:
+            print(f'[{time.strftime("%H:%M:%S")}] [Background] Connection error: {e}')
+    
+    socketio.start_background_task(background_connection_task)
+    time.sleep(2)
+    startup_manager.start_phase(StartupPhase.BACKGROUND_CONNECT)
+    
+    print('\n[6/8] Starting data collection...')
+    optimized_collector = create_optimized_collector(device_manager)
+    optimized_collector.set_collection_interval(config.DATA_SAMPLING_INTERVAL)
+    
+    def on_data_collected(device_data):
+        for device_id, data in device_data.items():
+            if data:
+                device_config = device_manager.get_device_config(device_id)
+                device_name = device_config.device_name if device_config else device_id
+                collected_data = {
+                    'device_id': device_id,
+                    'device_name': device_name,
+                    'timestamp': time.time(),
+                    'data': data
+                }
+                data_processor.add_to_buffer(collected_data)
+    
+    optimized_collector.set_data_callback(on_data_collected)
+    optimized_collector.start()
+    startup_manager.start_phase(StartupPhase.SERVICES_START)
+    
+    startup_manager.finish_startup()
+    
+    print(f'\nServer running on http://{config.SERVER_HOST}:{config.SERVER_PORT}')
+    print(f'Data collection interval: {config.DATA_SAMPLING_INTERVAL}ms')
+    print('=' * 50)
+    print('\nPress Ctrl+C to stop the server\n')
+    
+    import threading
+    stop_event = threading.Event()
+    server_exception = [None]
+    
+    def server_thread_func():
+        try:
+            print('[Server] Starting SocketIO server...')
+            socketio.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT, debug=False, use_reloader=False)
+            print('[Server] SocketIO server stopped normally')
+        except Exception as e:
+            print(f'[Server] SocketIO server exception: {e}')
+            import traceback
+            traceback.print_exc()
+            server_exception[0] = e
+        finally:
+            stop_event.set()
+    
+    server_thread = threading.Thread(target=server_thread_func, daemon=False)
+    server_thread.start()
+    print('[Server] Main thread waiting...')
+    
+    restart_attempts = 0
+    max_restart_attempts = 3
     
     try:
-        print('=' * 50)
-        print('PLC Data Monitor System v3.2 - Optimized')
-        print('=' * 50)
-        
-        startup_manager.start_phase(StartupPhase.DATABASE_INIT)
-        print('\n[1/7] Initializing database...')
-        data_processor = DataProcessor()
-        data_processor.data_storage.init()
-        startup_manager.complete_phase(StartupPhase.DATABASE_INIT, "Database initialized")
-
-        startup_manager.start_phase(StartupPhase.DEVICE_MANAGER_CREATE)
-        print('\n[2/7] Creating device manager...')
-        device_manager = create_device_manager()
-        startup_manager.complete_phase(StartupPhase.DEVICE_MANAGER_CREATE, "Device manager created")
-
-        startup_manager.start_phase(StartupPhase.DEVICES_INIT)
-        print('\n[3/7] Initializing devices...')
-        device_count = init_devices(device_manager)
-        startup_manager.complete_phase(StartupPhase.DEVICES_INIT, f"{device_count} device(s) initialized")
-
-        startup_manager.start_phase(StartupPhase.FLASK_APP_CREATE)
-        print('\n[4/7] Creating Flask app...')
-        app = create_app()
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
-        startup_manager.complete_phase(StartupPhase.FLASK_APP_CREATE, "Flask app created")
-
-        startup_manager.start_phase(StartupPhase.ROUTES_REGISTER)
-        print('\n[5/7] Registering routes...')
-        register_routes(app, device_manager)
-        startup_manager.complete_phase(StartupPhase.ROUTES_REGISTER, "Routes registered")
-
-        startup_manager.start_phase(StartupPhase.SERVICES_START)
-        print('\n[6/7] Starting services...')
-        socketio_handler = SocketIOHandler(socketio, device_manager, data_processor)
-        socketio_handler.register_events()
-
-        startup_manager.start_phase(StartupPhase.BACKGROUND_CONNECT)
-        print('\n[7/7] Starting background connections...')
-        start_background_connection(device_manager)
-        
-        # 等待连接完成（给后台线程一些时间）
-        print('[Main] Waiting for initial connections...')
-        time.sleep(2)
-        
-        startup_manager.complete_phase(StartupPhase.BACKGROUND_CONNECT, "Background connections started")
-        
-        # 在连接完成后启动优化的数据采集任务
-        print('[Main] Starting optimized data collection...')
-        optimized_collector = create_optimized_collector(device_manager)
-        optimized_collector.set_collection_interval(config.DATA_SAMPLING_INTERVAL)
-        
-        # 设置数据回调函数，将采集的数据发送到数据处理器
-        def on_data_collected(device_data):
-            for device_id, data in device_data.items():
-                if data:
-                    device_config = device_manager.get_device_config(device_id)
-                    device_name = device_config.device_name if device_config else device_id
-                    collected_data = {
-                        'device_id': device_id,
-                        'device_name': device_name,
-                        'timestamp': time.time(),
-                        'data': data
-                    }
-                    data_processor.add_to_buffer(collected_data)
-        
-        optimized_collector.set_data_callback(on_data_collected)
-        optimized_collector.start()
-
-        startup_manager.finish_startup()
-
-        register_shutdown_handlers(startup_manager, socketio_handler, optimized_collector)
-
-        print(f'\nServer running on http://{config.SERVER_HOST}:{config.SERVER_PORT}')
-        print(f'Data collection interval: {config.DATA_SAMPLING_INTERVAL}ms')
-        print('=' * 50)
-        print('\nPress Ctrl+C to stop the server\n')
-        
-        socketio.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT, debug=False)
-        
+        while not stop_event.is_set():
+            time.sleep(1)
+            
+            if optimized_collector and not optimized_collector._running:
+                restart_attempts += 1
+                print(f'[Server] Data collector stopped unexpectedly (attempt {restart_attempts}/{max_restart_attempts})')
+                
+                if restart_attempts <= max_restart_attempts:
+                    print('[Server] Attempting to restart data collector...')
+                    try:
+                        optimized_collector = create_optimized_collector(device_manager)
+                        optimized_collector.set_collection_interval(config.DATA_SAMPLING_INTERVAL)
+                        optimized_collector.set_data_callback(on_data_collected)
+                        optimized_collector.start()
+                        print('[Server] Data collector restarted successfully')
+                        restart_attempts = 0
+                    except Exception as e:
+                        print(f'[Server] Failed to restart data collector: {e}')
+                        time.sleep(5)
+                else:
+                    print('[Server] Maximum restart attempts reached, shutting down')
+                    break
     except KeyboardInterrupt:
-        print('\n\nServer stopped by user')
-        startup_manager.shutdown()
-    except Exception as e:
-        print(f'\nServer startup error: {e}')
+        print('\nServer stopped by user')
+    
+    if server_thread.is_alive():
+        print('[Server] Waiting for server thread to finish...')
+        server_thread.join(timeout=5)
+    
+    graceful_shutdown(socketio_handler, optimized_collector, device_manager, data_processor, startup_manager)
+    
+    if server_exception[0]:
+        print(f'[Server] Server exited with exception: {server_exception[0]}')
         import traceback
         traceback.print_exc()
-        startup_manager.fail_phase(startup_manager.context.current_phase, e)
-    finally:
-        if socketio_handler:
-            socketio_handler.stop_sending_thread()
-        if optimized_collector:
-            optimized_collector.stop()
-
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

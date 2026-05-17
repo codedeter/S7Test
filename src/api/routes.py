@@ -58,10 +58,15 @@ def register_routes(app, device_manager: DeviceManager):
         
         return jsonify({
             'status': health_status,
-            'version': '3.1',
+            'version': '4.0',
             'current_phase': context.current_phase.value,
             'start_time': context.start_time,
             'uptime': time.time() - context.start_time,
+            'socketio': {
+                'ping_interval': 15000,
+                'ping_timeout': 10000,
+                'transports': ['polling']
+            },
             'devices': {
                 'total': total_count,
                 'connected': connected_count,
@@ -78,12 +83,16 @@ def register_routes(app, device_manager: DeviceManager):
     @app.route('/api/status', methods=['GET'])
     def get_status():
         try:
+            print(f"[API] /api/status called from {request.remote_addr}")
             devices = device_manager.list_devices()
-            return jsonify({
+            result = {
                 'devices': devices,
                 'total': len(devices)
-            })
+            }
+            print(f"[API] /api/status returning {len(devices)} devices")
+            return jsonify(result)
         except Exception as e:
+            print(f"[API] /api/status error: {e}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/device/<device_id>/status', methods=['GET'])

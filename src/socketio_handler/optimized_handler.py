@@ -110,12 +110,44 @@ class OptimizedSocketIOHandler:
             # 准备发送数据
             payload = packet.data
             if isinstance(payload, bytes):
-                # 压缩数据
                 import base64
                 payload = {
                     '_compressed': True,
                     '_data': base64.b64encode(payload).decode('ascii')
                 }
+
+            if isinstance(payload, list):
+                current_values = {}
+                for item in payload:
+                    tag_name = item.get('tag_name', str(item.get('address', 'unknown')))
+                    current_values[tag_name] = {
+                        'tag_name': tag_name,
+                        'value': item.get('value', 0),
+                        'quality': item.get('quality', 1),
+                        'address': item.get('address', 0),
+                        'db_number': item.get('db_number', 1)
+                    }
+                
+                payload = {
+                    'device_id': packet.device_id,
+                    'current_values': current_values,
+                    'update_type': 'delta'
+                }
+            elif isinstance(payload, dict) and not payload.get('device_id'):
+                payload['device_id'] = packet.device_id
+                if not payload.get('current_values'):
+                    payload['current_values'] = {}
+                    if payload.get('data'):
+                        for item in payload['data']:
+                            tag_name = item.get('tag_name', str(item.get('address', 'unknown')))
+                            payload['current_values'][tag_name] = {
+                                'tag_name': tag_name,
+                                'value': item.get('value', 0),
+                                'quality': item.get('quality', 1),
+                                'address': item.get('address', 0),
+                                'db_number': item.get('db_number', 1)
+                            }
+                    payload['update_type'] = 'delta'
 
             send_data = {
                 'type': 'batch',
@@ -305,6 +337,12 @@ class OptimizedSocketIOHandler:
                     # 获取数据
                     device_data_map = self.data_processor.prepare_socketio_data()
 
+                    if not device_data_map:
+                        time.sleep(config.DATA_SAMPLING_INTERVAL / 1000)
+                        continue
+
+                    print(f"[SocketIO] Sending data for {len(device_data_map)} devices")
+                    
                     # 处理每个设备的数据
                     for device_id, full_data in device_data_map.items():
                         current_values = full_data.get('current_values', {})
@@ -362,6 +400,8 @@ class OptimizedSocketIOHandler:
                         )
 
                         self.socketio.emit('data', packet)
+                        update_type = packet_data['update_type']
+                        print(f"[SocketIO] Emitted data for {device_id}, sequence: {sequence}, type: {update_type}, count: {len(current_values)}")
 
                     # 发送故障状态
                     self._send_pending_anomalies()

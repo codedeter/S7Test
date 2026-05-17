@@ -124,6 +124,7 @@ PLCMonitor/
 │   │   └── data_processor.py # 数据处理服务
 │   ├── socketio_handler/    # SocketIO处理
 │   │   └── events.py         # SocketIO事件处理
+│   │   └── optimized_handler.py # 优化的SocketIO处理
 │   └── server.py            # 主服务器入口
 ├── plc_definitions/         # PLC定义文件
 │   └── README.md
@@ -344,6 +345,56 @@ GET /api/device/{device_id}/faults
 DELETE /api/device/{device_id}/data
 ```
 
+## 📈 SocketIO 数据格式
+
+### 数据格式
+
+服务器通过SocketIO发送的数据包格式：
+
+```javascript
+{
+  type: 'batch',
+  device_id: 'plc_001',
+  sequence: 123,
+  timestamp: 1715893200000,
+  count: 264,
+  compressed: false,
+  size: 1024,
+  payload: {
+    'tag_name_1': {
+      tag_name: '油温',
+      value: 45.2,
+      quality: 1,
+      address: 0,
+      db_number: 1
+    },
+    'tag_name_2': {
+      tag_name: '滑块压力',
+      value: 120.5,
+      quality: 1,
+      address: 2,
+      db_number: 1
+    }
+    // ...更多数据项
+  }
+}
+```
+
+### 前端处理
+
+前端使用 `validateDataPacket()` 函数验证数据包，并通过 `updateCharts()` 更新图表。关键功能：
+
+1. **请求防抖**：防止重复API请求
+   - `isStatusRequestInProgress` 标志控制 `/api/status` 请求
+   - `isLoadDevicesInProgress` 标志控制设备列表请求
+
+2. **图表数据匹配**：
+   - 油温图表：匹配包含"油温"的标签
+   - 水温图表：匹配包含"水温"的标签
+   - 压力图表：匹配"滑块压力"或"总压力"
+   - 位置图表：匹配"滑块位移"或"滑块位置"
+   - 速度图表：匹配"滑块速度"
+
 ## 🛠️ 常见问题
 
 ### 1. PLC 连接失败
@@ -390,6 +441,26 @@ DELETE /api/device/{device_id}/data
 - 确保数据库文件所在磁盘有足够空间
 - 定期清理过期数据
 
+### 6. 前端图表无数据
+
+**症状**: 前端连接成功但图表不显示数据
+
+**解决方法**:
+- 检查浏览器控制台是否有错误
+- 清除浏览器缓存后刷新
+- 检查服务器日志确认数据是否发送
+- 确认数据格式包含完整的 `tag_name`、`value` 等字段
+
+### 7. API 请求被取消
+
+**症状**: 浏览器网络标签显示请求状态为 "canceled"
+
+**解决方法**:
+- 检查是否有浏览器扩展拦截请求
+- 尝试使用无痕模式
+- 清除浏览器缓存
+- 确认CORS配置正确
+
 ## 🔒 安全建议
 
 1. **生产环境**: 将 `SERVER_HOST` 改为 `127.0.0.1` 或具体IP地址
@@ -397,6 +468,7 @@ DELETE /api/device/{device_id}/data
 3. **网络**: 建议使用VPN或内网连接访问PLC
 4. **端口**: 生产环境建议修改默认端口 3000
 5. **设备隔离**: 使用设备ID分区功能隔离不同设备的数据
+6. **CORS配置**: 仅允许受信任的域名访问API
 
 ## 📞 技术支持
 
@@ -404,6 +476,7 @@ DELETE /api/device/{device_id}/data
 1. 终端错误信息
 2. PLC连接状态
 3. 浏览器控制台 (F12)
+4. 服务器日志输出
 
 ## 📄 许可证
 
@@ -411,13 +484,13 @@ DELETE /api/device/{device_id}/data
 
 ---
 
-**版本**: 2.1.0
-**更新日期**: 2026-04-28
+**版本**: 2.2.0
+**更新日期**: 2026-05-17
 **更新说明**:
-- 重构模块化架构
-- 新增故障检测器框架，支持多设备类型
-- 修复异常检测逻辑问题
-- **数据库按设备ID分区管理**
-- 新增设备专用查询方法
-- 优化索引结构提升查询性能
-- 更新技术文档
+- 修复Socket.IO数据格式不匹配问题
+- 完善数据对象结构，包含完整的tag_name、value、quality、address、db_number等字段
+- 添加前端请求防抖机制，防止重复API请求
+- 优化图表数据更新逻辑
+- 增强CORS配置支持跨域访问
+- 修复浏览器端请求超时和取消问题
+- 提升系统整体稳定性
